@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tesla Mechanical Designs — Motor & Gearbox Selection Tool</title>
+    <meta name="description" content="Professional engineering decision-support tool for motor and gearbox selection by Tesla Mechanical Designs.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+    <!-- Header -->
+    <header class="site-header">
+        <div class="header-inner">
+            <div class="logo">
+                <div class="logo-mark">T</div>
+                <div class="logo-text">
+                    <span class="logo-primary">Tesla Mechanical Designs</span>
+                    <span class="logo-secondary">Motor & Gearbox Selection Tool</span>
+                </div>
+            </div>
+            <div class="header-status">
+                <span class="status-dot" id="status-dot"></span>
+                <span id="api-status-label">Connecting...</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Tab Navigation -->
+    <nav class="tab-nav">
+        <div class="tab-nav-inner">
+            <button class="tab-btn active" id="tab-select" data-tab="selection">
+                <span class="tab-icon">⚙</span> Component Selection
+            </button>
+            <button class="tab-btn" id="tab-browse" data-tab="browser">
+                <span class="tab-icon">📦</span> Component Browser
+            </button>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+
+        <!-- ══════════════════════════════════════════
+             TAB 1 — COMPONENT SELECTION
+        ══════════════════════════════════════════ -->
+        <div class="tab-content active" id="tab-content-selection">
+
+            <section class="panel input-panel">
+                <div class="panel-header">
+                    <h1>Engineering Requirements</h1>
+                    <p>Enter your mechanical requirements. The engine evaluates all <strong>Source A — Verified Local Database</strong> components and returns only the pairings that physically satisfy your specification.</p>
+                </div>
+
+                <form id="selection-form" novalidate>
+                    <div class="form-grid">
+                        <div class="field-group">
+                            <label for="speed">Required Output Speed</label>
+                            <div class="input-row">
+                                <input type="number" id="speed" placeholder="e.g. 150" min="1" step="any" required>
+                                <span class="unit-badge">RPM</span>
+                            </div>
+                            <p class="field-hint">The final shaft speed your application needs.</p>
+                        </div>
+                        <div class="field-group">
+                            <label for="torque">Required Output Torque</label>
+                            <div class="input-row">
+                                <input type="number" id="torque" placeholder="e.g. 1.5" min="0.001" step="any" required>
+                                <span class="unit-badge">Nm</span>
+                            </div>
+                            <p class="field-hint">Minimum continuous output torque required.</p>
+                        </div>
+                        <div class="field-group">
+                            <label for="voltage">Maximum Motor Voltage</label>
+                            <div class="input-row">
+                                <input type="number" id="voltage" placeholder="e.g. 24" min="1" step="any" required>
+                                <span class="unit-badge">V</span>
+                            </div>
+                            <p class="field-hint">Upper voltage limit for your power supply.</p>
+                        </div>
+                        <div class="field-group">
+                            <label for="service_factor">Service Factor</label>
+                            <div class="input-row">
+                                <input type="number" id="service_factor" value="1.25" min="1" max="3" step="0.05" required>
+                                <span class="unit-badge">SF</span>
+                            </div>
+                            <p class="field-hint">1.0 steady · 1.25 light shock · 1.5–2.0 heavy shock</p>
+                        </div>
+                        <div class="field-group">
+                            <label for="top_n">Results to Show</label>
+                            <div class="input-row">
+                                <input type="number" id="top_n" value="5" min="1" max="20" step="1" required>
+                                <span class="unit-badge">#</span>
+                            </div>
+                            <p class="field-hint">Top-ranked pairings to return (max 20).</p>
+                        </div>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="submit" class="btn-primary" id="submit-btn">
+                            <span class="btn-text">Find Matching Components</span>
+                            <span class="btn-spinner" id="btn-spinner" hidden></span>
+                        </button>
+                        <button type="reset" class="btn-secondary">Clear</button>
+                    </div>
+                </form>
+            </section>
+
+            <!-- Results -->
+            <section class="panel results-panel" id="results-panel" hidden>
+                <div class="panel-header">
+                    <h2>Recommended Pairings</h2>
+                    <p id="results-summary"></p>
+                </div>
+                <div class="source-badge-row">
+                    <span class="source-label source-a">● Source A — Verified Local Database</span>
+                    <!-- Connection Point D: future Source B badge will appear here -->
+                </div>
+                <div id="results-container"></div>
+            </section>
+
+            <!-- Error -->
+            <section class="panel error-panel" id="error-panel" hidden>
+                <div class="error-icon">⚠</div>
+                <h3 id="error-title">No Matching Components Found</h3>
+                <p id="error-message"></p>
+            </section>
+
+        </div>
+
+        <!-- ══════════════════════════════════════════
+             TAB 2 — COMPONENT BROWSER
+        ══════════════════════════════════════════ -->
+        <div class="tab-content" id="tab-content-browser">
+
+            <section class="panel browser-panel">
+                <div class="panel-header">
+                    <h2>Component Browser</h2>
+                    <p>All components currently in <strong>Source A — Verified Local Database</strong>. Filter by manufacturer or voltage.</p>
+                </div>
+
+                <div class="browser-filters">
+                    <select id="filter-manufacturer" class="filter-select">
+                        <option value="">All Manufacturers</option>
+                    </select>
+                    <select id="filter-voltage" class="filter-select">
+                        <option value="">All Voltages</option>
+                        <option value="12">≤ 12 V</option>
+                        <option value="24">≤ 24 V</option>
+                        <option value="48">≤ 48 V</option>
+                    </select>
+                    <button class="btn-secondary" id="browse-motors-btn">Show Motors</button>
+                    <button class="btn-secondary active-filter" id="browse-gearboxes-btn">Show Gearboxes</button>
+                </div>
+
+                <div id="browser-container">
+                    <p class="browser-empty">Select a component type above to browse the database.</p>
+                </div>
+            </section>
+
+        </div>
+
+    </main>
+
+    <footer class="site-footer">
+        <p>Tesla Mechanical Designs &copy; 2026 &mdash; All calculations are deterministic and traceable &mdash;
+           <strong>Source A:</strong> Verified Local DB &nbsp;|&nbsp;
+           <strong>Source B:</strong> Internet Discovery (future)</p>
+    </footer>
+
+    <script src="/static/js/main.js"></script>
+</body>
+</html>
