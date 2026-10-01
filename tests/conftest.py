@@ -15,6 +15,9 @@ TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_
 
 Base.metadata.create_all(bind=test_engine)
 
+# Seed the test database
+from app.database.seed import seed_database
+seed_database(custom_engine=test_engine, custom_session_local=TestingSessionLocal)
 def override_get_db():
     try:
         db = TestingSessionLocal()

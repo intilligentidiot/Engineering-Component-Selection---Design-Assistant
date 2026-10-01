@@ -38,6 +38,15 @@ def test_recommendation_engine_finds_match(db_session):
     assert best["performance"]["output_torque_nm"] >= 3.0
     assert best["motor"]["voltage_v"] <= 24.0
     
+    # Verify candidate-specific calculation trace structure and objective statuses
+    assert "calculation_trace" in best
+    trace = best["calculation_trace"]
+    assert trace["gearbox_output_torque"]["status"] == "MEETS"
+    assert trace["output_speed"]["status"] == "MEETS"
+    assert trace["design_torque"]["result"] == 3.0
+    assert "Substitution:" in trace["gearbox_output_torque"]["substitution"] or "Nm" in trace["gearbox_output_torque"]["substitution"]
+
+    
 def test_recommendation_engine_rejects_overvoltage(db_session):
     # Require strict 12V max
     recommendations = get_recommendations(

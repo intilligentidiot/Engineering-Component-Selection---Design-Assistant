@@ -1,28 +1,32 @@
 # Project Status
 
-## Current Stage: Stage 3 (Recommendation Engine)
+## Current Stage: Stage 6 (Internet Product Discovery & External Data Integration) — COMPLETED
 
-**Completed Features:**
-- Project structure initialized (Stage 0)
-- Python FastAPI setup (Stage 0)
-- Basic SQLite & SQLAlchemy configuration (Stage 0)
-- Health check API (`/health`) (Stage 0)
-- `trace.py`: Trace structured logging implemented (Stage 1)
-- `power.py`: Mechanical & motor power calculations implemented (Stage 1)
-- `ratio.py`: Gear ratio calculation implemented (Stage 1)
-- `torque.py`: Design and output torque calculations implemented (Stage 1)
-- Engineering validation rules implemented with structured error handling (Stage 1)
-- Pytest tests created for all calculation functions (Stage 1)
-- `models.py`: Database models created for Manufacturers, Motors, Gearboxes (Stage 2)
-- Added Data Provenance tracking fields to all components (Stage 2)
-- `seed.py`: Seeding script written with 20 real motors and 20 real gearboxes (Stage 2)
-- Database tests implemented in Pytest (Stage 2)
-- `recommend.py`: Deterministic algorithm created to match motors and gearboxes based on physical constraints (Stage 3)
-- Pytest verifications added for recommendation logic (Stage 3)
+**Completed Stages & Features:**
+- **Stage 0 (Foundation):** Project structure, FastAPI setup, SQLite & SQLAlchemy configuration, `/health` endpoint.
+- **Stage 1 (Engineering Calculation Engine):** `trace.py`, `power.py`, `ratio.py`, `torque.py`, structured validation, and pytest suite.
+- **Stage 2 (Component Database):** Models for Manufacturers, Motors, Gearboxes with provenance tracking, seeding with 20 real motors and gearboxes, DB tests.
+- **Stage 3 (Recommendation Engine):** Deterministic algorithm in `app/engine/recommend.py` matching motor & gearbox pairs using physical math and constraints, pytest suite.
+- **Stage 4 (Dashboard Interface):** Initial user interface for requirements input, recommendation cards, and layout.
+- **Stage 5 (Product Information / Local Component Intelligence - Source A):** Motor, Gearbox, Manufacturer APIs, local component browser, candidate calculation traces.
+- **Stage 6 (Internet Product Discovery & External Data Integration - Source B):**
+  - [x] Search Provider Abstraction Layer (`SearchProvider` ABC in `app/engine/search_provider.py`)
+  - [x] Real `SerpApiSearchProvider` integration using official `google-search-results` package
+  - [x] Secure API key handling via `SERPAPI_KEY` environment variable (never hard-coded, git-ignored `.env`)
+  - [x] Query construction engine generating targeted engineering queries from calculated requirements
+  - [x] External product normalization & sanitization module (`app/engine/discover.py`)
+  - [x] `DiscoveredComponent` SQLAlchemy table caching external components
+  - [x] Deterministic calculation engine evaluation applied to external components with objective engineering comparison statuses (`MEETS`, `DOES_NOT_MEET`, `DATA_MISSING`)
+  - [x] Optional flag `include_internet_results` on `/api/recommend` (defaults to `false` for zero regression on local workflow)
+  - [x] Graceful failure handling (`INTERNET_SEARCH_NOT_CONFIGURED`, `INTERNET_SEARCH_UNAVAILABLE` statuses, local search remains functional)
+  - [x] Source-based availability, pricing, datasheets, CAD indicators, and product images
+  - [x] Dual-source UI presentation on Dashboard distinguishing **SOURCE A (Verified Local DB)** from **SOURCE B (Internet Discovery)**
+  - [x] Automated test suite in `tests/test_discover.py` using mocked external providers (no reliance on live websites for automated tests)
+
 
 **Pending Next Stages:**
-- **Stage 4:** Basic User Dashboard
-- **Stage 5:** Product Information
-- **Stage 6:** CAD + 3D
-- **Stage 7:** AI Interface
-- **Stage 8:** Production / Extension
+- **Stage 7:** CAD + 3D Fitment Visualization & AI Interface
+- **Stage 8:** Production / PDF Reporting & Extensions
+
+
+

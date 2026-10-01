@@ -54,10 +54,21 @@ class RecommendRequest(BaseModel):
     service_factor: float     = Field(1.0,  gt=0, description="Service factor (default 1.0)")
     max_voltage_v: float      = Field(..., gt=0, description="Maximum motor voltage in Volts")
     top_n: int                = Field(5, ge=1, le=20)
+    include_internet_results: bool = Field(False, description="Enable Source B Internet Discovery search")
 
 # ─────────────────────────────────────────────────────────────
 # Existing endpoints
 # ─────────────────────────────────────────────────────────────
+
+class ParseRequirementsRequest(BaseModel):
+    text: str
+
+@router.post("/parse-requirements")
+def parse_requirements(request: ParseRequirementsRequest):
+    from app.ai.provider import get_parser
+    parser = get_parser()
+    result = parser.parse(request.text)
+    return result.model_dump()
 
 @router.get("/status")
 def api_status():
@@ -65,10 +76,9 @@ def api_status():
 
 @router.post("/recommend")
 def recommend(request: RecommendRequest, db: Session = Depends(get_db)):
-    # Connection Point B: in a future stage, include_internet_results=False
-    # will be a parameter here that triggers the discover.py module.
     try:
-        results = get_recommendations(
+        # Source A: Verified Local Database
+        local_results = get_recommendations(
             db=db,
             required_speed_rpm=request.required_speed_rpm,
             required_torque_nm=request.required_torque_nm,
@@ -76,16 +86,61 @@ def recommend(request: RecommendRequest, db: Session = Depends(get_db)):
             max_voltage_v=request.max_voltage_v,
             top_n=request.top_n
         )
+
+        for res in local_results:
+            res["source_type"] = "LOCAL"
+
+        internet_results = []
+        discovery_status = "NOT_REQUESTED"
+
+        # Source B: Internet Discovery (only if explicitly enabled)
+        if request.include_internet_results:
+            import os
+            try:
+                from app.engine.discover import discover_and_evaluate_components
+                internet_results = discover_and_evaluate_components(
+                    db=db,
+                    required_speed_rpm=request.required_speed_rpm,
+                    required_torque_nm=request.required_torque_nm,
+                    service_factor=request.service_factor,
+                    max_voltage_v=request.max_voltage_v,
+                    top_n=request.top_n
+                )
+
+                # ── Stage 6.1: Determine cache vs live status ────────────────────────────────
+                any_cache_hit = any(r.get("cache_hit") for r in internet_results)
+                if any_cache_hit:
+                    discovery_status = "COMPLETED_FROM_CACHE"
+                elif os.environ.get("SERPAPI_KEY"):
+                    discovery_status = "COMPLETED_LIVE"
+                else:
+                    discovery_status = "COMPLETED_MOCK_FALLBACK"
+
+            except ValueError as ve:
+                discovery_status = "INTERNET_SEARCH_NOT_CONFIGURED"
+            except Exception as ex:
+                # Graceful failure: local search remains intact
+                discovery_status = "INTERNET_SEARCH_UNAVAILABLE"
+                print(f"Internet discovery search failure: {ex}")
+
+
+        # Only count fully verified candidates that MEET requirements
+        valid_internet_count = sum(1 for r in internet_results if r.get("engineering_status") == "MEETS")
+
         return {
             "status": "ok",
-            "count": len(results),
+            "count": len(local_results),
+            "internet_count": valid_internet_count,
+            "discovery_status": discovery_status,
             "inputs": request.model_dump(),
-            "results": results
+            "results": local_results,
+            "internet_results": internet_results
         }
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
 
 # ─────────────────────────────────────────────────────────────
 # Component Detail Endpoints (Stage 5 — Source A)

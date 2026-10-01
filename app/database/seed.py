@@ -1,12 +1,15 @@
 from app.database.database import SessionLocal, engine, Base
 from app.database.models import Manufacturer, Motor, Gearbox, DATA_STATUS_ENGINEERING_VERIFIED
 
-def seed_database():
-    # Recreate tables to ensure a clean state
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
+def seed_database(custom_engine=None, custom_session_local=None):
+    use_engine = custom_engine or engine
+    SessionMaker = custom_session_local or SessionLocal
 
-    db = SessionLocal()
+    # Recreate tables to ensure a clean state
+    Base.metadata.drop_all(bind=use_engine)
+    Base.metadata.create_all(bind=use_engine)
+
+    db = SessionMaker()
 
     # 1. Add Manufacturers
     mfg_maxon = Manufacturer(name="Maxon", website="https://www.maxongroup.com")

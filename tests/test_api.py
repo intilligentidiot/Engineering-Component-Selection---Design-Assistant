@@ -84,3 +84,69 @@ def test_recommend_still_works():
     assert r.status_code == 200
     data = r.json()
     assert data["count"] > 0
+    assert data["discovery_status"] == "NOT_REQUESTED"
+    assert len(data["internet_results"]) == 0
+
+def test_recommend_with_internet_discovery():
+    r = client.post("/api/recommend", json={
+        "required_speed_rpm": 100.0,
+        "required_torque_nm": 2.0,
+        "service_factor": 1.2,
+        "max_voltage_v": 24.0,
+        "top_n": 5,
+        "include_internet_results": True
+    })
+    assert r.status_code == 200
+    data = r.json()
+    assert data["discovery_status"] in ["COMPLETED", "COMPLETED_FROM_CACHE", "COMPLETED_MOCK_FALLBACK", "COMPLETED_LIVE"]
+    assert len(data["internet_results"]) > 0
+    assert data["internet_results"][0]["source_type"] == "INTERNET"
+
+def test_recommend_scenario_valid_local_and_mock_internet(monkeypatch):
+    monkeypatch.delenv("SERPAPI_KEY", raising=False)
+    # User debug scenario: 35 RPM, 1 Nm, SF 1.0, 24.0V max, Source B enabled
+    # We use 24.0V so that the mock provider's 24V records (Oriental Motor, Nanotec, ElectroCraft)
+    # are not entirely skipped by the voltage filter.
+    r = client.post("/api/recommend", json={
+        "required_speed_rpm": 35.0,
+        "required_torque_nm": 1.0,
+        "service_factor": 1.0,
+        "max_voltage_v": 24.0,
+        "top_n": 5,
+        "include_internet_results": True
+    })
+    assert r.status_code == 200
+    data = r.json()
+    assert data["count"] == 3
+    # 3 total returned from internet: Oriental Motor (MEETS), Nanotec (MEETS), ElectroCraft (DATA_MISSING)
+    # However, only MEETS candidates count towards internet_count now.
+    assert data["internet_count"] == 2
+    assert data["discovery_status"] in ["COMPLETED", "COMPLETED_FROM_CACHE", "COMPLETED_MOCK_FALLBACK", "COMPLETED_LIVE"]
+    
+    manufacturers = [item["manufacturer"] for item in data["internet_results"]]
+    assert "Oriental Motor" in manufacturers
+    assert "Nanotec" in manufacturers
+    assert "ElectroCraft" in manufacturers
+    
+    meets_count = sum(1 for item in data["internet_results"] if item["engineering_status"] == "MEETS")
+    missing_count = sum(1 for item in data["internet_results"] if item["engineering_status"] == "DATA_MISSING")
+    
+    assert meets_count == 2
+    assert missing_count == 1
+
+def test_recommend_scenario_source_a_zero_source_b_zero():
+    # Impossible requirement: 10,000 RPM, 1,000 Nm, 20V max, Source B enabled
+    r = client.post("/api/recommend", json={
+        "required_speed_rpm": 10000.0,
+        "required_torque_nm": 1000.0,
+        "service_factor": 2.0,
+        "max_voltage_v": 20.0,
+        "top_n": 5,
+        "include_internet_results": True
+    })
+    assert r.status_code == 200
+    data = r.json()
+    assert data["count"] == 0
+    assert data["internet_count"] == 0
+
+

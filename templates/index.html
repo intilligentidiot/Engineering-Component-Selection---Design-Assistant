@@ -54,6 +54,19 @@
                     <p>Enter your mechanical requirements. The engine evaluates all <strong>Source A — Verified Local Database</strong> components and returns only the pairings that physically satisfy your specification.</p>
                 </div>
 
+                <!-- Stage 7.1: AI Requirement Parser -->
+                <div class="ai-input-section" style="margin-bottom: 2rem; padding: 1.5rem; background: var(--surface-2); border-radius: 8px; border: 1px solid var(--border);">
+                    <label for="ai-text" style="font-weight: 600; color: var(--accent-blue); display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                        <span style="font-size: 1.2rem;">✨</span> Natural-Language Requirement
+                    </label>
+                    <p class="field-hint" style="margin-bottom: 1rem;">Describe your requirement in plain text. Example: <em>"I need 1 Nm at 35 RPM, maximum 20 V for a conveyor."</em></p>
+                    <div style="display: flex; gap: 1rem;">
+                        <input type="text" id="ai-text" placeholder="Type your requirements here..." style="flex: 1; padding: 0.75rem; border: 1px solid var(--border); border-radius: 4px; font-family: inherit; font-size: 1rem;">
+                        <button type="button" id="ai-parse-btn" class="btn-secondary" style="white-space: nowrap;">Parse Requirements</button>
+                    </div>
+                    <div id="ai-feedback" style="margin-top: 1rem; font-size: 0.9rem; color: var(--text-secondary); display: none;"></div>
+                </div>
+
                 <form id="selection-form" novalidate>
                     <div class="form-grid">
                         <div class="field-group">
@@ -95,6 +108,13 @@
                                 <span class="unit-badge">#</span>
                             </div>
                             <p class="field-hint">Top-ranked pairings to return (max 20).</p>
+                        </div>
+                        <div class="field-group" style="grid-column: span 2">
+                            <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer; font-weight:600; color:var(--accent-blue)">
+                                <input type="checkbox" id="include_internet" style="width:1.1rem; height:1.1rem; cursor:pointer">
+                                Enable Source B — Internet Product Discovery
+                            </label>
+                            <p class="field-hint">Search authorized external component catalog feeds for matching products.</p>
                         </div>
                     </div>
 
