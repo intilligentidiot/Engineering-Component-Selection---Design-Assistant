@@ -7,6 +7,7 @@ from app.database.models import Motor, Gearbox, Manufacturer
 from app.engine.recommend import get_recommendations
 from app.engine.trace import ValidationError
 from app.engine.sizing import size_application, SizingRequest
+from app.engine.bearing import bearing_life, BearingRequest
 
 router = APIRouter()
 
@@ -83,6 +84,11 @@ def parse_sizing(request: ParseRequirementsRequest):
     """
     from app.ai.sizing_parser import get_sizing_parser
     return get_sizing_parser().parse(request.text).model_dump()
+
+@router.post("/bearing-life")
+def bearing_life_check(request: BearingRequest):
+    """ISO 281 basic rating life: life from the catalogue rating, or the minimum rating for a required life."""
+    return bearing_life(request).model_dump()
 
 @router.post("/size")
 def size(request: SizingRequest):

@@ -107,6 +107,10 @@ class SizingRequest(BaseModel):
     part: PartInput = PartInput()
     params: ApplicationParams = ApplicationParams()
     duty: DutyInput = DutyInput()
+    # Form paths whose values came from the suggestion list (shown to and accepted by the user)
+    suggested: List[str] = []
+    # The machine as the user described it (e.g. "ball screw"), used to pick suggestions
+    machine_text: Optional[str] = None
 
 
 class StepInput(BaseModel):
@@ -159,4 +163,8 @@ class SizingResult(BaseModel):
     assumptions: List[str] = []
     warnings: List[str] = []
     material_notes: List[str] = []
+    # Suggestions available for inputs the user has not given: path -> {label, value, note}
+    suggestions: Dict[str, Dict[str, Any]] = {}
+    # Suggested values that were actually used in this calculation (human-readable)
+    suggested_used: List[str] = []
     defaults_version: str = ""

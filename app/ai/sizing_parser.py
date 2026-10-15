@@ -36,7 +36,10 @@ class FieldQuote(BaseModel):
 
 
 class SizingExtraction(BaseModel):
-    application: Optional[str] = Field(None, description="One of: conveyor, hoist, rotary_table, screw_axis, rack_pinion_axis, winding. Null if unclear.")
+    application: Optional[str] = Field(None, description="One of: conveyor, hoist, rotary_table, screw_axis, rack_pinion_axis, winding — only when the user's machine really is that kind of motion (e.g. 'belt feeder' → conveyor, 'winch' → hoist, 'dial table' → rotary_table). Null if it is not one of these.")
+    machine_as_written: Optional[str] = Field(None, description="The machine name exactly as the user wrote it, e.g. 'belt feeder'.")
+    machine_explanation: Optional[str] = Field(None, description="One plain-English sentence explaining which kind of motion the machine is and why, e.g. 'A palletizer lift raises loads vertically, so it is calculated as a lift.'")
+    unsupported_machine: Optional[str] = Field(None, description="If the user describes something that is NOT one of the six supported motions (e.g. a pump, fan, mixer, press, or a bearing), its name exactly as written. Never force it into a supported type.")
     material_name: Optional[str] = Field(None, description="Material name as written by the user.")
     density_kg_m3: Optional[float] = Field(None, description="Density in kg/m³ ONLY if the user states it (convert g/cm³ × 1000). Never from your own knowledge.")
     hardness_scale: Optional[str] = Field(None, description="'Shore A' or 'Shore D' if stated.")
@@ -151,8 +154,12 @@ class RejectedValue(BaseModel):
 
 
 class SizingParseResult(BaseModel):
-    parser_status: str  # PARSED | NEEDS_CLARIFICATION | NOTHING_FOUND | ERROR_*
+    parser_status: str  # PARSED | NEEDS_CLARIFICATION | NOTHING_FOUND | UNSUPPORTED_MACHINE | ERROR_*
     provider: str
+    machine_as_written: Optional[str] = None     # e.g. "belt feeder" (mapped to `application`)
+    unsupported_machine: Optional[str] = None    # e.g. "bearing" — not a supported motion
+    unsupported_message: Optional[str] = None
+    machine_explanation: Optional[str] = None    # why the machine was treated as that motion
     values: List[ExtractedValue] = []
     rejected: List[RejectedValue] = []
     clarifications: List[str] = []
@@ -166,7 +173,22 @@ SYSTEM_INSTRUCTION = (
     "and ask for it in `clarifications`. The same applies to friction coefficients, efficiencies, web tension, "
     "service factor and inertia. "
     "Do not calculate torque, speed, power or any other result. Do not select products. "
-    "If something is ambiguous, leave it null and add a short clarification question."
+    "If something is ambiguous, leave it null and add a short clarification question. "
+    "MACHINE TYPE — classify by the physics of what the motor must move, not by the machine's name. Any machine, "
+    "whatever it is called, is supported when its driven motion is one of these: "
+    "conveyor = a load moved horizontally or up a slope on a belt, chain, rollers or a sliding surface "
+    "(feeders, transfer lines, roller tables, pallet conveyors, sorting belts...); "
+    "hoist = a load raised or lowered vertically by a rope, cable or chain on a drum/sprocket "
+    "(winches, cranes, lifts, elevators, palletizer lifts...); "
+    "rotary_table = a table or mass rotated about an axis, continuously or in steps "
+    "(turntables, indexers, dial tables, carousels, rotary fixtures...); "
+    "screw_axis = linear motion driven by a lead or ball screw (actuators, screw jacks, electric cylinders...); "
+    "rack_pinion_axis = linear motion driven by a rack and pinion or a toothed belt (gantries, belt-driven slides...); "
+    "winding = material wound onto or off a roll under tension (winders, unwinders, reels, spoolers, coilers...). "
+    "Copy the user's own words for the machine into machine_as_written and write machine_explanation. "
+    "If the driven motion is something else — fluid handling (pumps, fans, compressors), mixing, crushing, "
+    "pressing/punching, vehicles, or a component such as a bearing — put its name in unsupported_machine, "
+    "leave application null and never force it into one of the six types."
 )
 
 
@@ -240,14 +262,21 @@ class SizingRequirementParser(ABC):
             values.append(ExtractedValue(path=path, value=val, quote=quote))
 
         clar = list(ex.clarifications or [])
+        as_written = ex.machine_as_written if ex.machine_as_written and _norm(ex.machine_as_written) in norm_text else None
+        unsupported = ex.unsupported_machine if ex.unsupported_machine and _norm(ex.unsupported_machine) in norm_text else None
+        unsupported_msg = _unsupported_message(unsupported) if unsupported else None
         if rejected:
             clar.append("Some values could not be confirmed from your text and were not filled in.")
-        if not values and not clar:
+        if not values and not clar and not unsupported:
             clar.append("No values were recognised. Try including the machine type, part size or weight, "
                         "speed with units (e.g. 0.5 m/s), and hours per day.")
         status = "NOTHING_FOUND" if not values else ("NEEDS_CLARIFICATION" if clar else "PARSED")
+        if unsupported and not any(v.path == "application" for v in values):
+            status = "UNSUPPORTED_MACHINE"
         return SizingParseResult(parser_status=status, provider=self.name, values=values,
-                                 rejected=rejected, clarifications=clar)
+                                 rejected=rejected, clarifications=clar, machine_as_written=as_written,
+                                 unsupported_machine=unsupported, unsupported_message=unsupported_msg,
+                                 machine_explanation=(ex.machine_explanation or None) if as_written or values else None)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -256,6 +285,39 @@ class SizingRequirementParser(ABC):
 
 _N = r"(\d+(?:\.\d+)?)"
 _LEN = {"mm": 1.0, "cm": 10.0, "m": 1000.0}
+
+
+# Names people use for the six supported motions (order = priority when several match)
+_MACHINE_NAMES = [
+    ("screw_axis", r"\b(?:ball ?screw|lead ?screw|screw ?jack|screw[- ](?:drive|axis|actuator)|linear actuator|electric cylinder|linear (?:axis|slide|module|stage))\b"),
+    ("rack_pinion_axis", r"\b(?:rack(?: and| ?&) ?pinion|gantry|(?:belt[- ]driven|toothed[- ]belt|timing[- ]belt) (?:axis|actuator|slide|module)|linear belt)\b"),
+    ("rotary_table", r"\b(?:turn ?table|rotary (?:table|indexer|platform)|index(?:ing)? table|indexer|rotating (?:table|platform)|dial table|carousel)\b"),
+    ("winding", r"\b(?:(?:un|re)?wind(?:ing|er)|reel(?:er)?|spool(?:er|ing)?|coiler|take[- ]up roll)\b"),
+    ("hoist", r"\b(?:hoist|winch|crane|lift(?:ing|er)?|elevator|vertical lift)\b"),
+    ("conveyor", r"\b(?:conveyor|belt feeder|feeder belt|roller (?:table|line|bed)|transfer belt|belt line|(?:in|out)feed belt|accumulation table)\b"),
+]
+
+_MOTION_EXPLANATION = {
+    "conveyor": "moves a load along a belt, rollers or a surface, so it is calculated as a conveyor.",
+    "hoist": "raises a load vertically, so it is calculated as a lift / hoist.",
+    "rotary_table": "rotates a table or mass about an axis, so it is calculated as a turntable / indexer.",
+    "screw_axis": "moves a load in a straight line with a screw, so it is calculated as a screw-driven axis.",
+    "rack_pinion_axis": "moves a load in a straight line with a rack & pinion or toothed belt, so it is calculated as that kind of axis.",
+    "winding": "winds material onto or off a roll under tension, so it is calculated as a winder.",
+}
+
+# Things that are not one of the supported motions (checked first)
+_UNSUPPORTED = (r"\b(?:bucket elevators?|screw conveyors?|augers?|bearings?|pumps?|fans?|blowers?|compressors?|mixers?|"
+                r"agitators?|crushers?|grinders?|extruders?|presses|press|punch(?:es)?|shredders?|vehicles?|carts?|trolleys?)\b")
+
+
+def _unsupported_message(name: str) -> str:
+    if re.search(r"bearing", name, re.IGNORECASE):
+        return ("A bearing is a part, not a machine the motor drives. Use the 'Bearing Life' tab to check a bearing's "
+                "life (ISO 281). To size the motor, describe the machine the bearing sits in.")
+    return (f"A '{name}' can't be sized here yet — it needs its own engineering formulas, which haven't been added. "
+            f"Supported: conveyor, lift/hoist, turntable/indexer, screw axis, rack & pinion / belt axis, winding. "
+            f"If you already know the torque and speed, use the 'Advanced: Torque & RPM' tab.")
 
 
 class MockSizingParser(SizingRequirementParser):
@@ -306,25 +368,30 @@ class MockSizingParser(SizingRequirementParser):
 
     # sections
     def _application(self):
+        # Unsupported machines first, so e.g. "bucket elevator" or "screw conveyor" is not
+        # mistaken for a hoist or conveyor.
+        m = re.search(_UNSUPPORTED, self._text, re.IGNORECASE)
+        masked = self._text
+        if m:
+            self._out["unsupported_machine"] = m.group(0)
+            masked = self._text[:m.start()] + " " * (m.end() - m.start()) + self._text[m.end():]
         found: List[Tuple[int, str, re.Match]] = []
-        for app, pat in [
-            ("screw_axis", r"\b(?:ball ?screw|lead ?screw|screw[- ](?:drive|axis|actuator))\b"),
-            ("rack_pinion_axis", r"\b(?:rack(?: and| ?&) ?pinion|belt[- ]driven (?:axis|actuator|slide)|gantry)\b"),
-            ("rotary_table", r"\b(?:turn ?table|rotary table|index(?:ing)? table|indexer|rotating table)\b"),
-            ("winding", r"\b(?:un|re)?wind(?:ing|er)\b"),
-            ("hoist", r"\b(?:hoist|winch|crane|lift(?:ing)?|elevator)\b"),
-            ("conveyor", r"\bconveyor\b"),
-        ]:
-            m = re.search(pat, self._text, re.IGNORECASE)
-            if m:
-                found.append((m.start(), app, m))
+        for app, pat in _MACHINE_NAMES:
+            mm = re.search(pat, masked, re.IGNORECASE)
+            if mm:
+                found.append((mm.start(), app, mm))
         if not found:
             return
         found.sort(key=lambda x: x[0])
-        _, app, m = found[0]
+        _, app, mm = found[0]
         self._out["application"] = app
-        self._quotes.append(FieldQuote(field="application", quote=m.group(0)))
-        if len({a for _, a, _ in found}) > 1 and not (app == "hoist" and len(found) == 1):
+        self._out["machine_as_written"] = mm.group(0)
+        self._out["machine_explanation"] = f"'{mm.group(0)}' {_MOTION_EXPLANATION[app]}"
+        self._quotes.append(FieldQuote(field="application", quote=mm.group(0)))
+        if re.fullmatch(r"linear (?:axis|slide|module|stage)", mm.group(0), re.IGNORECASE):
+            self._clar.append(f"'{mm.group(0)}' was treated as a screw-driven axis. "
+                              f"If it is driven by a rack & pinion or a toothed belt, change the machine type.")
+        if len({a for _, a, _ in found}) > 1:
             others = sorted({a for _, a, _ in found} - {app})
             self._clar.append(f"Your text mentions more than one machine type; '{app}' was chosen "
                               f"(also mentioned: {', '.join(others)}). Please check.")

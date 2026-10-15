@@ -7,7 +7,7 @@
     <meta name="description" content="Professional engineering decision-support tool for motor and gearbox selection by Tesla Mechanical Designs.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/style.css?v=8.3">
 </head>
 <body>
 
@@ -33,6 +33,9 @@
         <div class="tab-nav-inner">
             <button class="tab-btn active" id="tab-size" data-tab="sizing">
                 <span class="tab-icon">🧮</span> Size My Application
+            </button>
+            <button class="tab-btn" id="tab-bearing" data-tab="bearing">
+                <span class="tab-icon">◎</span> Bearing Life
             </button>
             <button class="tab-btn" id="tab-select" data-tab="selection">
                 <span class="tab-icon">⚙</span> Advanced: Torque &amp; RPM
@@ -141,6 +144,32 @@
                     <p id="sz-proof-sub"></p>
                 </div>
                 <div id="sz-proof"></div>
+            </section>
+        </div>
+
+        <!-- ══════════════════════════════════════════
+             TAB — BEARING LIFE (ISO 281)
+        ══════════════════════════════════════════ -->
+        <div class="tab-content" id="tab-content-bearing">
+            <section class="panel input-panel">
+                <div class="panel-header">
+                    <h1>Bearing Life Check</h1>
+                    <p>ISO 281 basic rating life. Enter the bearing's catalogue rating to see how long it will last — or leave it blank and enter the life you need to get the minimum rating to look for.</p>
+                </div>
+                <form id="bearing-form" novalidate>
+                    <div class="form-grid" id="br-fields"></div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn-primary" id="br-submit-btn"><span class="btn-text">Calculate bearing life</span></button>
+                        <button type="reset" class="btn-secondary">Clear</button>
+                    </div>
+                </form>
+            </section>
+            <section class="panel" id="br-result-panel" hidden>
+                <div class="panel-header">
+                    <h2 id="br-result-title">Result</h2>
+                    <p id="br-result-sub"></p>
+                </div>
+                <div id="br-result"></div>
             </section>
         </div>
 
@@ -292,7 +321,8 @@
            <strong>Source B:</strong> Internet Discovery</p>
     </footer>
 
-    <script src="/static/js/main.js"></script>
-    <script src="/static/js/sizing.js"></script>
+    <script src="/static/js/main.js?v=8.3"></script>
+    <script src="/static/js/sizing.js?v=8.3"></script>
+    <script src="/static/js/bearing.js?v=8.3"></script>
 </body>
 </html>

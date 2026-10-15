@@ -30,10 +30,16 @@
     // Values read from the user's text (path -> the user's own words); removed when the user edits that field
     const aiQuotes = new Map();
     let appConfirmed = false;      // machine type stated in the text or picked by the user
+    // Values filled from the suggestion list (path -> note); removed when the user edits that field
+    const suggested = new Map();
+    let machineAsWritten = null;   // the user's own name for the machine, e.g. "belt feeder"
+    let machineExplanation = null; // why it was treated as that motion (from the AI)
     let mode = "start";            // start | review | full
 
     const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-    const fmt = x => (x === null || x === undefined) ? "—" : Number(x).toPrecision(4).replace(/\.?0+$/, "").replace(/\.?0+e/, "e");
+    // 4 significant figures, without dropping the zeros of whole numbers (2000 stays 2000)
+    const fmt = x => (x === null || x === undefined) ? "—"
+        : Math.abs(x) >= 1e4 ? Math.round(x).toLocaleString() : String(Number(Number(x).toPrecision(4)));
     const post = async (url, body) => {
         const r = await fetch(`${API}${url}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
         const data = await r.json();
@@ -162,7 +168,8 @@
     // ── Field rendering ──────────────────────────────────────
     function fieldHtml(d) {
         const v = values[d.path];
-        const cls = (missingPaths.has(d.path) ? " missing" : "") + (aiQuotes.has(d.path) ? " ai-filled" : "");
+        const cls = (missingPaths.has(d.path) ? " missing" : "") + (aiQuotes.has(d.path) ? " ai-filled" : "")
+                  + (suggested.has(d.path) ? " suggested" : "");
         const lbl = `${esc(d.label)}${d.optional ? ' <span class="opt-tag">optional</span>' : ""}`;
         const aiHint = aiQuotes.has(d.path) ? `<p class="field-hint ai-hint">From your text: “${esc(aiQuotes.get(d.path))}”</p>` : "";
         let input;
@@ -179,7 +186,8 @@
                 <label>${lbl}</label>
                 <div class="input-row">${input}${d.unit ? `<span class="unit-badge">${esc(d.unit)}</span>` : ""}</div>
                 ${aiHint}
-                ${d.hint ? `<p class="field-hint">${esc(d.hint)}</p>` : ""}
+                ${suggested.has(d.path) ? `<p class="field-hint sug-hint">Suggested: ${esc(suggested.get(d.path))}</p>` : ""}
+                ${d.hint && !suggested.has(d.path) ? `<p class="field-hint">${esc(d.hint)}</p>` : ""}
             </div>`;
     }
 
@@ -240,9 +248,11 @@
         sizingForm.querySelectorAll(`[data-field="${p}"]`).forEach(g => {
             g.classList.remove("missing");
             if (aiQuotes.has(p)) { g.classList.remove("ai-filled"); g.querySelector(".ai-hint")?.remove(); }
+            if (suggested.has(p)) { g.classList.remove("suggested"); g.querySelector(".sug-hint")?.remove(); }
         });
         missingPaths.delete(p);
         aiQuotes.delete(p);   // edited by the user → no longer "read from text"
+        suggested.delete(p);  // … and no longer a suggestion
     });
     sizingForm.addEventListener("change", async e => {
         if (e.target.id === "sz-pick-app") {
@@ -259,7 +269,8 @@
         setTimeout(() => {
             Object.keys(values).forEach(k => delete values[k]);
             Object.assign(values, DEFAULT_VALUES);
-            missingPaths.clear(); aiQuotes.clear(); appConfirmed = false;
+            missingPaths.clear(); aiQuotes.clear(); suggested.clear(); appConfirmed = false;
+            machineAsWritten = null; machineExplanation = null;
             appSelect.value = "conveyor"; aiText.value = "";
             aiFeedback.hidden = true; proofPanel.hidden = true; resultsPanel.hidden = true; errorPanel.hidden = true;
             render(); setMode("start");
@@ -273,8 +284,10 @@
         aiBtn.disabled = true; aiBtn.textContent = "Reading...";
         try {
             const data = await post("/api/parse-sizing", { text });
-            [...aiQuotes.keys()].forEach(p => { if (p !== "application") delete values[p]; });  // replace the previous reading
-            aiQuotes.clear();
+            [...aiQuotes.keys(), ...suggested.keys()].forEach(p => { if (p !== "application") delete values[p]; });  // replace the previous reading
+            aiQuotes.clear(); suggested.clear();
+            machineAsWritten = data.machine_as_written || null;
+            machineExplanation = data.machine_explanation || null;
             (data.values || []).forEach(v => {
                 if (v.path === "application") { appSelect.value = v.value; appConfirmed = true; }
                 else values[v.path] = v.value;
@@ -284,10 +297,22 @@
             render();
 
             const notes = [...(data.clarifications || [])];
-            if ((data.values || []).length === 0) notes.unshift("We couldn't pick out any values. You can answer the questions below instead.");
-            aiFeedback.className = "sz-note warn";
-            aiFeedback.innerHTML = notes.length ? `<ul>${notes.map(c => `<li>${esc(c)}</li>`).join("")}</ul>` : "";
-            aiFeedback.hidden = notes.length === 0;
+            if (data.unsupported_message) {
+                const isBearing = /bearing/i.test(data.unsupported_machine || "");
+                aiFeedback.className = "sz-note warn";
+                aiFeedback.innerHTML = `<strong>${esc(data.unsupported_message)}</strong>
+                    <div class="sz-ai-actions" style="margin-top:0.6rem">
+                        <button type="button" class="btn-secondary" data-goto-tab="${isBearing ? "bearing" : "selection"}">
+                            ${isBearing ? "Open Bearing Life" : "Open Advanced: Torque & RPM"}</button></div>` +
+                    (notes.length ? `<ul>${notes.map(c => `<li>${esc(c)}</li>`).join("")}</ul>` : "");
+                aiFeedback.hidden = false;
+                if (data.parser_status === "UNSUPPORTED_MACHINE") { setMode("start"); return; }
+            } else {
+                if ((data.values || []).length === 0) notes.unshift("We couldn't pick out any values. You can answer the questions below instead.");
+                aiFeedback.className = "sz-note warn";
+                aiFeedback.innerHTML = notes.length ? `<ul>${notes.map(c => `<li>${esc(c)}</li>`).join("")}</ul>` : "";
+                aiFeedback.hidden = notes.length === 0;
+            }
             await refreshReview();
             setMode("review");
         } catch (err) {
@@ -303,7 +328,12 @@
     const defFor = p => visible.find(d => d.path === p);
 
     function displayValue(p) {
-        if (p === "application") return appSelect.options[appSelect.selectedIndex].text.split(" — ")[0];
+        if (p === "application") {
+            const name = appSelect.options[appSelect.selectedIndex].text.split(" — ")[0];
+            const said = machineAsWritten && !name.toLowerCase().includes(machineAsWritten.toLowerCase())
+                ? ` <em>(you said “${esc(machineAsWritten)}”)</em>` : "";
+            return esc(name) + said;
+        }
         const d = defFor(p), v = values[p];
         if (!d) return esc(v);
         if (d.type === "select") return esc((d.options.find(([val]) => val === v) || [v, v])[1]);
@@ -316,30 +346,44 @@
     const chipLabel = p => SHORT_LABELS[p] || (defFor(p) || { label: p }).label;
 
     async function refreshReview(highlight = false) {
-        // Understood: every value that will be used — read from the text, answered, or a visible default
-        const used = visible.filter(d => isFilled(d) && (aiQuotes.has(d.path) || !d.optional)).map(d => d.path);
-        const chips = [...(appConfirmed ? ["application"] : []), ...used];
-        understood.innerHTML = chips.length
-            ? chips.map(p => {
-                const src = aiQuotes.has(p) ? `From your text: “${aiQuotes.get(p)}”` : "Entered or assumed — change it under Edit all details";
-                return `<span class="sz-chip${aiQuotes.has(p) ? "" : " plain"}" title="${esc(src)}"><span>${esc(chipLabel(p))}</span> ${displayValue(p)}</span>`;
-            }).join("")
-            : `<span class="field-hint">Nothing yet — answer the questions below.</span>`;
-
-        // Missing: ask the backend what the calculation still needs
+        // Ask the backend what the calculation still needs. Anything it has a suggestion for is
+        // filled in (and shown as "Suggested"); only what is left is asked as a question.
         let missing = [], errors = [];
         if (!appConfirmed) {
             missing = ["_app"];
         } else {
-            const { body, limits } = buildPayload();
-            try {
-                const sized = await post("/api/size", body);
+            for (let pass = 0; pass < 2; pass++) {
+                const { body, limits } = buildPayload();
+                let sized;
+                try { sized = await post("/api/size", body); } catch (err) { errors = [err.message]; break; }
+                const table = sized.suggestions || {};
                 missing = (sized.missing_inputs || []).map(m => m.field);
                 errors = sized.errors || [];
-            } catch (err) { errors = [err.message]; }
-            if (!limits.max_voltage_v) missing.push("limits.max_voltage_v");
+                if (!limits.max_voltage_v) missing.push("limits.max_voltage_v");
+                let filled = false;
+                missing.forEach(p => {
+                    const v = values[p];
+                    if (table[p] && (v === undefined || v === null || v === "")) {
+                        values[p] = table[p].value; suggested.set(p, table[p].note); filled = true;
+                    }
+                });
+                if (!filled) break;
+                render();
+            }
         }
-        missing = [...new Set(missing)];
+        missing = [...new Set(missing)].filter(p => !suggested.has(p));
+
+        // Understood: every value that will be used — read from the text, answered, or a visible default
+        const used = visible.filter(d => isFilled(d) && !suggested.has(d.path) && (aiQuotes.has(d.path) || !d.optional)).map(d => d.path);
+        const chips = [...(appConfirmed ? ["application"] : []), ...used];
+        understood.innerHTML = (chips.length
+            ? chips.map(p => {
+                const src = p === "application" && machineExplanation ? machineExplanation
+                          : aiQuotes.has(p) ? `From your text: “${aiQuotes.get(p)}”` : "Entered or assumed — change it under Edit all details";
+                return `<span class="sz-chip${aiQuotes.has(p) ? "" : " plain"}" title="${esc(src)}"><span>${esc(chipLabel(p))}</span> ${displayValue(p)}</span>`;
+            }).join("")
+            : `<span class="field-hint">Nothing yet — answer the questions below.</span>`)
+            + (appConfirmed && machineExplanation ? `<p class="field-hint sz-why">${esc(machineExplanation)}</p>` : "");
 
         const questions = missing.map(p => {
             if (p === "_app") return `
@@ -354,11 +398,17 @@
             return fieldHtml(d);
         }).join("");
 
-        needed.innerHTML = questions + (errors.length
+        const sugDefs = [...suggested.keys()].map(defFor).filter(Boolean);
+        const sugBlock = sugDefs.length ? `
+            <div class="sz-sug-head" style="grid-column: 1 / -1">
+                <strong>We filled these in with typical values</strong> — check them and change any you know better.
+            </div>${sugDefs.map(fieldHtml).join("")}` : "";
+
+        needed.innerHTML = questions + sugBlock + (errors.length
             ? `<div class="sz-note danger" style="grid-column: 1 / -1"><strong>Please correct:</strong><ul>${errors.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>` : "");
         const n = missing.length;
-        neededTitle.textContent = n === 0 ? "" : n === 1 ? "Just one more thing" : `Just ${n} more things`;
-        neededWrap.hidden = n === 0 && errors.length === 0;
+        neededTitle.textContent = n === 0 ? (sugDefs.length ? "Ready to calculate" : "") : n === 1 ? "Just one more thing" : `Just ${n} more things`;
+        neededWrap.hidden = n === 0 && errors.length === 0 && sugDefs.length === 0;
         return { missing, errors };
     }
 
@@ -373,6 +423,8 @@
             const [grp, key] = d.path.split(".");
             (grp === "limits" ? limits : body[grp])[key] = v;
         });
+        body.suggested = [...suggested.keys()].filter(p => !p.startsWith("limits."));
+        if (machineAsWritten) body.machine_text = machineAsWritten;
         return { body, limits };
     }
 
@@ -500,6 +552,9 @@
                 ${card("Power", r.required_power_w, "W", "At the gearbox output")}
             </div>
             ${list(sized.warnings, "danger", "Safety notes")}
+            ${list([...(sized.suggested_used || []),
+                    ...(suggested.has("limits.max_voltage_v") ? [`Supply voltage: ${values["limits.max_voltage_v"]} V (suggested) — ${suggested.get("limits.max_voltage_v")}`] : [])],
+                   "info", "Typical values we used because you didn't give them — please check")}
             ${list(sized.assumptions, "warn", "Things we assumed because you didn't mention them — change them under “Edit all details” if wrong")}
             <details class="sz-details">
                 <summary>Show the full calculation (${sized.steps.length} steps)</summary>

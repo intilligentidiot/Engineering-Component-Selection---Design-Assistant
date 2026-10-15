@@ -450,3 +450,15 @@ body {
     .panel { padding: 1.25rem; }
     .header-inner { flex-direction: column; align-items: flex-start; }
 }
+
+/* Suggested (typical) values — clearly different from values the user gave */
+.field-group.suggested .input-row { border-color: #b388ff; box-shadow: 0 0 0 3px rgba(179,136,255,0.15); }
+.sug-hint { color: #c9a8ff; }
+.sz-sug-head {
+    margin-top: 0.5rem; padding: 0.6rem 0.9rem; border-radius: var(--radius-sm);
+    background: rgba(179,136,255,0.08); border: 1px solid rgba(179,136,255,0.3);
+    font-size: 0.85rem; color: var(--silver-200);
+}
+.sz-sug-head strong { color: #c9a8ff; }
+.sz-why { margin-top: 0.6rem; }
+.sz-chip em { font-style: normal; color: var(--silver-400); font-size: 0.78rem; }

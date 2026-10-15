@@ -34,7 +34,7 @@ document.querySelectorAll(".tab-btn").forEach(btn => {
         document.getElementById(`tab-content-${btn.dataset.tab}`).classList.add("active");
         // Results are shared by the sizing and advanced tabs; clear them when switching
         resultsPanel.hidden = true; errorPanel.hidden = true;
-        document.getElementById("shared-results").hidden = btn.dataset.tab === "browser";
+        document.getElementById("shared-results").hidden = ["browser", "bearing"].includes(btn.dataset.tab);
         if (btn.dataset.tab === "browser") initBrowser();
     });
 });

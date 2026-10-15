@@ -36,6 +36,12 @@
   - [x] UI: "Size My Application" is the primary tab; the torque/RPM form remains as "Advanced"
   - [x] Plain-text description pre-fills the sizing form (`app/ai/sizing_parser.py`, `POST /api/parse-sizing`; mock / Gemini / OpenAI). Every value must quote the user's own words verbatim or it is rejected; densities, friction, efficiency etc. are never supplied by the AI; the user ticks a confirmation box before calculating
 
+- **Engineer feedback round (2026-10-15):**
+  - [x] Bearing Life tab — ISO 281 basic rating life, or minimum C for a required life (`app/engine/bearing.py`, `POST /api/bearing-life`)
+  - [x] Suggested values for missing inputs, from a reviewed reference list, clearly marked and listed in the result (`app/engine/sizing/suggestions.py`)
+  - [x] Machines recognised by their motion, not a fixed name list; unsupported machines explained, never forced into a type
+  - [x] Live on Railway (auto-deploys from `main`)
+
 **Pending Next Stages:**
 - **Engineering sign-off** of Stage 8 defaults (`app/engine/sizing/defaults.py`)
 - **Stage 8.x:** sourced material library (density with citations)

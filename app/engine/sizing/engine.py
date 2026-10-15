@@ -18,6 +18,7 @@ from app.engine.sizing.schemas import (
     SizingRequest, SizingResult, SizingStep, StepInput, MissingInput,
     OperatingPoint, SizedRequirement,
 )
+from app.engine.sizing.suggestions import suggestions_for
 from app.engine.sizing.defaults import (
     G, DEFAULTS_VERSION, service_factor_for, hours_band_label, LOAD_CLASS_LABELS,
 )
@@ -25,7 +26,7 @@ from app.engine.sizing.defaults import (
 
 def _f(x: float) -> str:
     """Compact number formatting for substitutions."""
-    return f"{x:.4g}"
+    return f"{x:,.0f}" if abs(x) >= 1e4 else f"{x:.4g}"
 
 
 class _Incomplete(Exception):
@@ -558,8 +559,24 @@ def _service_factor(ctx: _Ctx, req: SizingRequest, lc: str, h: float) -> float:
 # Public entry point
 # ─────────────────────────────────────────────────────────────
 
+def _suggested_used(req: SizingRequest, table: Dict[str, Dict[str, Any]]) -> List[str]:
+    """Human-readable list of suggested values that this request actually used."""
+    out = []
+    for path in req.suggested:
+        grp, _, key = path.partition(".")
+        section = getattr(req, grp, None)
+        value = getattr(section, key, None) if section is not None else None
+        s = table.get(path)
+        if s is None or value is None:
+            continue
+        shown = LOAD_CLASS_LABELS.get(value, value) if isinstance(value, str) else _f(value)
+        out.append(f"{s['label']}: {shown} (suggested) — {s['note']}")
+    return out
+
+
 def size_application(req: SizingRequest) -> SizingResult:
     ctx = _Ctx(req.application)
+    table = suggestions_for(req.application, req.machine_text)
     _record_material(ctx, req)
     try:
         lc, h = _collect_duty(ctx, req)
@@ -572,7 +589,7 @@ def size_application(req: SizingRequest) -> SizingResult:
             application=req.application,
             missing_inputs=ctx.missing, errors=ctx.errors,
             steps=ctx.steps, assumptions=ctx.assumptions, warnings=ctx.warnings,
-            material_notes=ctx.material_notes, defaults_version=DEFAULTS_VERSION,
+            material_notes=ctx.material_notes, suggestions=table, defaults_version=DEFAULTS_VERSION,
         )
 
     n, _, T_pk = model["envelope"]
@@ -594,5 +611,6 @@ def size_application(req: SizingRequest) -> SizingResult:
             service_factor=sf, design_torque_nm=T_d, design_peak_torque_nm=T_dp, required_power_w=P,
         ),
         assumptions=ctx.assumptions, warnings=ctx.warnings,
-        material_notes=ctx.material_notes, defaults_version=DEFAULTS_VERSION,
+        material_notes=ctx.material_notes, suggestions=table,
+        suggested_used=_suggested_used(req, table), defaults_version=DEFAULTS_VERSION,
     )

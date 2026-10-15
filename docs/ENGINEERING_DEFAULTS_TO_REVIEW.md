@@ -67,6 +67,46 @@ These inputs are **always required** and are never defaulted: density (unless ma
   - If neither proves it, the candidate is DATA_INCOMPLETE. It is never assumed to pass.
 - **Hoist:** the report says it is a sizing estimate, not a certified hoist design (FEM/ISO classes are out of scope), and that a brake is required.
 
-## 6. Not yet supported
+## 6. Suggested values for missing inputs
+
+The engineer who reviewed the tool asked for this. When the user leaves an input out, the simple view now fills it in from the list below. Each one is shown in purple, marked **"Suggested"** with the reason, and listed again in the result under "Typical values we used". The user can change any of them before calculating.
+
+Where a range exists, the end that gives the **larger** motor requirement is used. The values live in [`app/engine/sizing/suggestions.py`](../app/engine/sizing/suggestions.py).
+
+| Input | Suggested | Basis (typical published range) |
+|---|---|---|
+| Conveyor friction coefficient | 0.5 | Belt sliding on a steel bed: 0.3–0.5. Roller conveyors: about 0.03–0.05, which the user must enter |
+| Linear guide friction | 0.01 | Rolling guides: 0.002–0.01. Plain sliding guides: about 0.1–0.2, which the user must enter |
+| Screw efficiency (ball screw named) | 0.9 | Ball screws: 0.9–0.95 |
+| Screw efficiency (otherwise) | 0.2 | Lead (trapezoidal) screws: 0.2–0.5 |
+| Time to reach full speed | 1.0 s | Design choice. It only affects the peak torque. **Not conservative for machines that must start faster** |
+| How smooth is the work | Moderate shocks | Middle class |
+| Running hours per day | 8 h | One shift. **Not conservative for multi-shift use** |
+| Supply voltage | 24 V | Common industrial DC |
+
+These are **never** suggested, because they belong to the user's own machine: dimensions, mass, density, speeds, pulley/drum/pinion/screw sizes, web tension, incline/axis angle, and inertia.
+**To confirm:** each value, especially the two rows marked "not conservative".
+
+## 7. Bearing life (ISO 281)
+
+The new **Bearing Life** tab calculates ISO 281 *basic* rating life: P = X·Fr + Y·Fa, L10 = (C/P)^p with p = 3 for ball and 10/3 for roller bearings, L10h = L10·10⁶/(60·n). C, X and Y must come from the bearing catalogue and are never assumed. The modified-life factor a_ISO (lubrication and contamination) is **not** included, and the results page says so.
+
+Reliability factor a1 used:
+
+| Reliability | 90 % | 95 % | 96 % | 97 % | 98 % | 99 % |
+|---|---|---|---|---|---|---|
+| a1 | 1.00 | 0.64 | 0.55 | 0.47 | 0.37 | 0.25 |
+
+**To confirm:** the a1 values against ISO 281:2007.
+
+## 8. How machine types are recognised
+
+The tool classifies a machine by **what the motor has to move**, not by its name. Any machine whose driven motion is one of the six supported types is calculated with that type's equations, and the result explains the choice (for example, "'belt feeder' moves a load along a belt…, so it is calculated as a conveyor").
+- With an AI key set (`AI_PROVIDER=gemini` or `openai`), any wording is understood.
+- Without a key, a built-in list of common names is used.
+
+Machines whose physics is not covered (pumps, fans, compressors, mixers, crushers, presses, vehicles) are reported as **not supported yet**, and the user is pointed to the Advanced torque/RPM tab. Bearings are pointed to the Bearing Life tab. The tool never forces one of these into a supported type.
+
+## 9. Not yet supported
 
 Bulk-material conveyors (CEMA), screw conveyors, mixers, pumps and fans, crushers, extruders, presses/punching, and vehicles. Each needs its own approved equations before it is added.
