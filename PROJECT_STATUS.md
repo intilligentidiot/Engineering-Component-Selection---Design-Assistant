@@ -1,6 +1,6 @@
 # Project Status
 
-## Current Stage: Stage 6 (Internet Product Discovery & External Data Integration) — COMPLETED
+## Current Stage: Stage 8 (Application-Based Sizing) — IMPLEMENTED, defaults awaiting engineering sign-off
 
 **Completed Stages & Features:**
 - **Stage 0 (Foundation):** Project structure, FastAPI setup, SQLite & SQLAlchemy configuration, `/health` endpoint.
@@ -24,9 +24,22 @@
   - [x] Automated test suite in `tests/test_discover.py` using mocked external providers (no reliance on live websites for automated tests)
 
 
+- **Stage 7.1 / 7.2 (AI Requirement Parsing):** natural-language extraction of torque/RPM/voltage; Gemini / OpenAI / Mock provider architecture. AI never calculates.
+- **Stage 8 (Application-Based Sizing — primary workflow):**
+  - [x] Spec: `docs/STAGE_8_APPLICATION_SIZING_SPEC.md`; defaults for review: `docs/ENGINEERING_DEFAULTS_TO_REVIEW.md`
+  - [x] `app/engine/sizing/`: material + part → mass; conveyor, hoist, turntable/indexer, screw axis, rack & pinion / belt axis, winding
+  - [x] Duty cycle (RMS torque), versioned service-factor table, full step-by-step calculation proof with input origins
+  - [x] Missing inputs → `REQUIREMENTS_INCOMPLETE` (nothing guessed); hardness recorded but not used
+  - [x] `POST /api/size`; `/api/recommend` gains optional `peak_torque_nm` and `speed_tolerance_pct`
+  - [x] Peak-torque checks (motor peak + gearbox rating) for Source A and Source B; unified `MEETS / DOES_NOT_MEET / DATA_INCOMPLETE` (renamed from `DATA_MISSING`)
+  - [x] Fit % comparison indicator (MEETS candidates only, labelled as comparison only)
+  - [x] UI: "Size My Application" is the primary tab; the torque/RPM form remains as "Advanced"
+  - [x] Plain-text description pre-fills the sizing form (`app/ai/sizing_parser.py`, `POST /api/parse-sizing`; mock / Gemini / OpenAI). Every value must quote the user's own words verbatim or it is rejected; densities, friction, efficiency etc. are never supplied by the AI; the user ticks a confirmation box before calculating
+
 **Pending Next Stages:**
-- **Stage 7:** CAD + 3D Fitment Visualization & AI Interface
-- **Stage 8:** Production / PDF Reporting & Extensions
+- **Engineering sign-off** of Stage 8 defaults (`app/engine/sizing/defaults.py`)
+- **Stage 8.x:** sourced material library (density with citations)
+- CAD + 3D Fitment Visualization; PDF reporting
 
 
 

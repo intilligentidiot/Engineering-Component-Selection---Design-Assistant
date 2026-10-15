@@ -101,11 +101,11 @@ def test_discover_and_evaluate_components(db_session):
     assert complete["calculation_trace"]["gearbox_output_torque"]["status"] == "MEETS"
     assert complete["cad"]["available"] is True
     
-    # Check Incomplete Product Evaluation (DATA_MISSING handling)
+    # Check Incomplete Product Evaluation (DATA_INCOMPLETE handling)
     incomplete = results[1]
     assert incomplete["manufacturer"] == "IncompleteCorp"
     assert incomplete["verification"]["data_status"] == "DATA_INCOMPLETE"
-    assert incomplete["engineering_status"] == "DATA_MISSING"
+    assert incomplete["engineering_status"] == "DATA_INCOMPLETE"
 
 # ── 4. Graceful Error Handling Test ──────────────────────────
 

@@ -118,7 +118,7 @@ def test_recommend_scenario_valid_local_and_mock_internet(monkeypatch):
     assert r.status_code == 200
     data = r.json()
     assert data["count"] == 3
-    # 3 total returned from internet: Oriental Motor (MEETS), Nanotec (MEETS), ElectroCraft (DATA_MISSING)
+    # 3 total returned from internet: Oriental Motor (MEETS), Nanotec (MEETS), ElectroCraft (DATA_INCOMPLETE)
     # However, only MEETS candidates count towards internet_count now.
     assert data["internet_count"] == 2
     assert data["discovery_status"] in ["COMPLETED", "COMPLETED_FROM_CACHE", "COMPLETED_MOCK_FALLBACK", "COMPLETED_LIVE"]
@@ -129,7 +129,7 @@ def test_recommend_scenario_valid_local_and_mock_internet(monkeypatch):
     assert "ElectroCraft" in manufacturers
     
     meets_count = sum(1 for item in data["internet_results"] if item["engineering_status"] == "MEETS")
-    missing_count = sum(1 for item in data["internet_results"] if item["engineering_status"] == "DATA_MISSING")
+    missing_count = sum(1 for item in data["internet_results"] if item["engineering_status"] == "DATA_INCOMPLETE")
     
     assert meets_count == 2
     assert missing_count == 1

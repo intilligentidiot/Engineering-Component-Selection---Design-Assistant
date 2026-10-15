@@ -31,8 +31,11 @@
     <!-- Tab Navigation -->
     <nav class="tab-nav">
         <div class="tab-nav-inner">
-            <button class="tab-btn active" id="tab-select" data-tab="selection">
-                <span class="tab-icon">⚙</span> Component Selection
+            <button class="tab-btn active" id="tab-size" data-tab="sizing">
+                <span class="tab-icon">🧮</span> Size My Application
+            </button>
+            <button class="tab-btn" id="tab-select" data-tab="selection">
+                <span class="tab-icon">⚙</span> Advanced: Torque &amp; RPM
             </button>
             <button class="tab-btn" id="tab-browse" data-tab="browser">
                 <span class="tab-icon">📦</span> Component Browser
@@ -46,7 +49,102 @@
         <!-- ══════════════════════════════════════════
              TAB 1 — COMPONENT SELECTION
         ══════════════════════════════════════════ -->
-        <div class="tab-content active" id="tab-content-selection">
+        <!-- ══════════════════════════════════════════
+             TAB 0 — APPLICATION SIZING (Stage 8, primary workflow)
+        ══════════════════════════════════════════ -->
+        <div class="tab-content active" id="tab-content-sizing">
+            <section class="panel input-panel">
+                <div class="panel-header">
+                    <h1>What does your machine need to do?</h1>
+                    <p>Describe it in your own words. We work out the speed, turning force and power it needs — showing every step — and find motor + gearbox combinations that can do it.</p>
+                </div>
+
+                <form id="sizing-form" novalidate>
+                    <!-- Simple view: describe → review what we understood → answer only what is missing -->
+                    <div id="sz-guided">
+                        <div class="sz-ai-box">
+                            <textarea id="sz-ai-text" rows="4" placeholder="Example: Conveyor moving 20 plastic blocks 200x100x50 mm, density 1200 kg/m3, belt speed 0.5 m/s, 100 mm pulley, flat, 8 hours a day, 24 V."></textarea>
+                            <div class="sz-ai-actions">
+                                <button type="button" id="sz-ai-btn" class="btn-primary">Continue</button>
+                                <button type="button" id="sz-manual-btn" class="link-btn">or fill in the full form yourself</button>
+                            </div>
+                            <p class="field-hint">Mention what you are moving (size or weight), the machine type, how fast, and how many hours a day. Only the numbers you write are used — nothing is guessed.</p>
+                            <div id="sz-ai-feedback" hidden></div>
+                        </div>
+
+                        <div id="sz-review" hidden>
+                            <h3 class="sz-step"><span>✓</span> What we understood</h3>
+                            <div id="sz-understood" class="sz-chips"></div>
+
+                            <div id="sz-needed-wrap" hidden>
+                                <h3 class="sz-step"><span>?</span> <span id="sz-needed-title">A few more details</span></h3>
+                                <div class="form-grid" id="sz-needed"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Full form (all fields) -->
+                    <div id="sz-full" hidden>
+                        <h3 class="sz-step"><span>1</span> What does the machine do?</h3>
+                        <div class="form-grid">
+                            <div class="field-group" style="grid-column: span 2">
+                                <label for="sz-application">Machine type</label>
+                                <div class="input-row">
+                                    <select id="sz-application">
+                                        <option value="conveyor">Conveyor — moves parts along a belt or rollers</option>
+                                        <option value="hoist">Lift / hoist — raises a load with a rope and drum</option>
+                                        <option value="rotary_table">Turntable / indexer — rotates a table</option>
+                                        <option value="screw_axis">Linear axis — lead screw / ball screw</option>
+                                        <option value="rack_pinion_axis">Linear axis — rack &amp; pinion or toothed belt</option>
+                                        <option value="winding">Winding / unwinding — rolls up film, paper, fabric</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <h3 class="sz-step"><span>2</span> Material</h3>
+                        <div class="form-grid" id="sz-material-fields"></div>
+
+                        <div id="sz-part-block">
+                            <h3 class="sz-step"><span>3</span> Part being moved</h3>
+                            <div class="form-grid" id="sz-part-fields"></div>
+                        </div>
+
+                        <h3 class="sz-step"><span id="sz-motion-num">4</span> Motion &amp; load</h3>
+                        <div class="form-grid" id="sz-app-fields"></div>
+
+                        <h3 class="sz-step"><span id="sz-duty-num">5</span> How hard does it work?</h3>
+                        <div class="form-grid" id="sz-duty-fields"></div>
+
+                        <h3 class="sz-step"><span id="sz-limits-num">6</span> Power supply</h3>
+                        <div class="form-grid" id="sz-limit-fields"></div>
+                    </div>
+
+                    <div id="sz-run" hidden>
+                        <label class="check-label sz-internet"><input type="checkbox" id="sz-internet"> Also search the internet for matching products</label>
+                        <div class="form-actions">
+                            <button type="submit" class="btn-primary" id="sz-submit-btn">
+                                <span class="btn-text">Calculate &amp; Find Motors</span>
+                                <span class="btn-spinner" id="sz-spinner" hidden></span>
+                            </button>
+                            <button type="button" class="btn-secondary" id="sz-toggle-full">Edit all details</button>
+                            <button type="reset" class="btn-secondary">Start over</button>
+                        </div>
+                    </div>
+                </form>
+            </section>
+
+            <!-- Calculation proof -->
+            <section class="panel" id="sz-proof-panel" hidden>
+                <div class="panel-header">
+                    <h2 id="sz-proof-title">How the requirement was calculated</h2>
+                    <p id="sz-proof-sub"></p>
+                </div>
+                <div id="sz-proof"></div>
+            </section>
+        </div>
+
+        <div class="tab-content" id="tab-content-selection">
 
             <section class="panel input-panel">
                 <div class="panel-header">
@@ -128,6 +226,10 @@
                 </form>
             </section>
 
+        </div>
+
+        <!-- Shared results (used by both sizing and advanced tabs) -->
+        <div class="shared-results" id="shared-results">
             <!-- Results -->
             <section class="panel results-panel" id="results-panel" hidden>
                 <div class="panel-header">
@@ -187,9 +289,10 @@
     <footer class="site-footer">
         <p>Tesla Mechanical Designs &copy; 2026 &mdash; All calculations are deterministic and traceable &mdash;
            <strong>Source A:</strong> Verified Local DB &nbsp;|&nbsp;
-           <strong>Source B:</strong> Internet Discovery (future)</p>
+           <strong>Source B:</strong> Internet Discovery</p>
     </footer>
 
     <script src="/static/js/main.js"></script>
+    <script src="/static/js/sizing.js"></script>
 </body>
 </html>

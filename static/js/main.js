@@ -1,4 +1,4 @@
-/* Tesla Mechanical Designs — Stage 5: Product Information */
+/* Tesla Mechanical Designs — Stage 5: Product Information (+ Stage 8 status / fit display) */
 
 const API = "";
 
@@ -32,6 +32,9 @@ document.querySelectorAll(".tab-btn").forEach(btn => {
         document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
         btn.classList.add("active");
         document.getElementById(`tab-content-${btn.dataset.tab}`).classList.add("active");
+        // Results are shared by the sizing and advanced tabs; clear them when switching
+        resultsPanel.hidden = true; errorPanel.hidden = true;
+        document.getElementById("shared-results").hidden = btn.dataset.tab === "browser";
         if (btn.dataset.tab === "browser") initBrowser();
     });
 });
@@ -143,6 +146,23 @@ function statusBadge(s) {
     return `<span class="data-status ${s}">${s.replace(/_/g," ")}</span>`;
 }
 
+// Fit % is a comparison aid only (MEETS candidates). Never a safety or confidence figure.
+function fitPill(fit) {
+    if (!fit) return `<span class="fit-pill none" title="Fit is only shown for candidates that MEET every check">—</span>`;
+    const tip = `${fit.label} Torque ${fit.breakdown.torque}% · Speed ${fit.breakdown.speed}%` +
+                (fit.breakdown.power !== undefined ? ` · Power ${fit.breakdown.power}%` : "");
+    return `<span class="fit-pill" title="${tip}">${fit.percent}% fit</span>`;
+}
+
+function peakTraceHtml(pt, n) {
+    if (!pt) return "";
+    return `
+        <div style="margin-top:0.5rem"><strong>${n ? n + ". " : ""}Peak Torque (acceleration):</strong></div>
+        <div style="color:var(--silver-300)">${pt.formula}</div>
+        ${pt.substitution ? `<div style="color:var(--silver-400)">Basis: ${pt.substitution}</div>` : ""}
+        <div>Comparison: ${pt.comparison} &nbsp;<span class="data-status ${pt.status}">${pt.status.replace(/_/g," ")}</span></div>`;
+}
+
 function renderResults(data) {
     // ── Stage 6.1: Build discovery status label ────────────────────────────────────────────
     const ds = data.discovery_status || "NOT_REQUESTED";
@@ -211,6 +231,8 @@ function renderResults(data) {
                 <div class="perf-row"><span class="perf-label">Speed</span><span class="perf-value">${rec.performance.output_speed_rpm} RPM</span></div>
                 <div class="perf-row"><span class="perf-label">Torque</span><span class="perf-value">${rec.performance.output_torque_nm} Nm</span></div>
                 <div class="perf-row"><span class="perf-label">Margin</span><span class="perf-value"><span class="margin-pill">+${marginPct}%</span></span></div>
+                <div class="perf-row"><span class="perf-label">Result</span><span class="perf-value">${statusBadge(rec.engineering_status || "MEETS")}</span></div>
+                <div class="perf-row"><span class="perf-label">Fit</span><span class="perf-value">${fitPill(rec.fit)}</span></div>
                 <button class="expand-btn" data-target="card-detail-a-${i}" style="margin-top:0.5rem">▼ Full Details & Calculations</button>
             </div>
         </div>
@@ -266,6 +288,7 @@ function renderResults(data) {
                     <div style="color:var(--silver-300)">${trace.output_speed?.formula || "Output Speed = Motor RPM / Ratio"}</div>
                     <div style="color:var(--silver-400)">Substitution: ${trace.output_speed?.substitution || ""}</div>
                     <div>Comparison: ${trace.output_speed?.comparison || ""} &nbsp;<span class="data-status ${trace.output_speed?.status || "MEETS"}">${trace.output_speed?.status || "MEETS"}</span></div>
+                    ${peakTraceHtml(trace.peak_torque, 5)}
                 </div>
             </div>
         </div>`;
@@ -349,7 +372,8 @@ function renderResults(data) {
 
                 <div class="perf-summary">
                     <div class="perf-row"><span class="perf-label">Status</span><span class="perf-value">${statusBadge(rec.verification.data_status)}</span></div>
-                    <div class="perf-row"><span class="perf-label">Eng Match</span><span class="perf-value"><span class="data-status ${rec.engineering_status}">${rec.engineering_status}</span></span></div>
+                    <div class="perf-row"><span class="perf-label">Eng Match</span><span class="perf-value">${statusBadge(rec.engineering_status)}</span></div>
+                    <div class="perf-row"><span class="perf-label">Fit</span><span class="perf-value">${fitPill(rec.fit)}</span></div>
                     <div class="perf-row"><span class="perf-label">Price</span><span class="perf-value">${priceHtml}</span></div>
                     <button class="expand-btn" data-target="card-detail-b-${i}" style="margin-top:0.5rem">▼ Full Details & Spec</button>
                 </div>
@@ -399,6 +423,7 @@ function renderResults(data) {
                             <div style="margin-top:0.5rem"><strong>Speed Check:</strong> ${trace.output_speed.formula}</div>
                             <div style="color:var(--silver-400)">Substitution: ${trace.output_speed.substitution}</div>
                             <div>Result: ${trace.output_speed.comparison} &nbsp;<span class="data-status ${trace.output_speed.status}">${trace.output_speed.status}</span></div>
+                            ${peakTraceHtml(trace.peak_torque, "")}
                         ` : `<div style="color:var(--silver-400)">${trace.error || "Essential specs missing for deterministic calculation."} Status: <span class="data-status DATA_INCOMPLETE">DATA_INCOMPLETE</span></div>`}
                     </div>
                 </div>

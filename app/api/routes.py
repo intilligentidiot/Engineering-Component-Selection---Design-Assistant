@@ -6,6 +6,7 @@ from app.database.database import get_db
 from app.database.models import Motor, Gearbox, Manufacturer
 from app.engine.recommend import get_recommendations
 from app.engine.trace import ValidationError
+from app.engine.sizing import size_application, SizingRequest
 
 router = APIRouter()
 
@@ -55,6 +56,9 @@ class RecommendRequest(BaseModel):
     max_voltage_v: float      = Field(..., gt=0, description="Maximum motor voltage in Volts")
     top_n: int                = Field(5, ge=1, le=20)
     include_internet_results: bool = Field(False, description="Enable Source B Internet Discovery search")
+    # Stage 8 (optional): peak torque before service factor, and allowed over-speed in %
+    peak_torque_nm: Optional[float] = Field(None, gt=0, description="Peak (acceleration) torque in Nm, before service factor")
+    speed_tolerance_pct: Optional[float] = Field(None, ge=0, le=200, description="Allowed over-speed vs required speed (%)")
 
 # ─────────────────────────────────────────────────────────────
 # Existing endpoints
@@ -70,6 +74,25 @@ def parse_requirements(request: ParseRequirementsRequest):
     result = parser.parse(request.text)
     return result.model_dump()
 
+@router.post("/parse-sizing")
+def parse_sizing(request: ParseRequirementsRequest):
+    """
+    Stage 8.x: read a plain-text description and return values for the sizing form.
+    Every value carries the user's own words as evidence; the user confirms them
+    in the form before anything is calculated.
+    """
+    from app.ai.sizing_parser import get_sizing_parser
+    return get_sizing_parser().parse(request.text).model_dump()
+
+@router.post("/size")
+def size(request: SizingRequest):
+    """
+    Stage 8: application-based sizing. Turns material + part + application + motion
+    inputs into the output-shaft requirement, with the full calculation proof.
+    Does not select components — feed `requirement` into /api/recommend.
+    """
+    return size_application(request).model_dump()
+
 @router.get("/status")
 def api_status():
     return {"api": "operational"}
@@ -84,7 +107,9 @@ def recommend(request: RecommendRequest, db: Session = Depends(get_db)):
             required_torque_nm=request.required_torque_nm,
             service_factor=request.service_factor,
             max_voltage_v=request.max_voltage_v,
-            top_n=request.top_n
+            top_n=request.top_n,
+            peak_torque_nm=request.peak_torque_nm,
+            speed_tolerance_pct=request.speed_tolerance_pct,
         )
 
         for res in local_results:
@@ -104,7 +129,9 @@ def recommend(request: RecommendRequest, db: Session = Depends(get_db)):
                     required_torque_nm=request.required_torque_nm,
                     service_factor=request.service_factor,
                     max_voltage_v=request.max_voltage_v,
-                    top_n=request.top_n
+                    top_n=request.top_n,
+                    peak_torque_nm=request.peak_torque_nm,
+                    speed_tolerance_pct=request.speed_tolerance_pct,
                 )
 
                 # ── Stage 6.1: Determine cache vs live status ────────────────────────────────

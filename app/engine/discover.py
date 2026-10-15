@@ -15,6 +15,8 @@ from app.database.models import (
 from app.engine.search_provider import SearchProvider
 from app.engine.torque import calculate_design_torque, calculate_gearbox_output_torque
 from app.engine.power import calculate_mechanical_power
+from app.engine.fit import compute_fit
+from app.engine.sizing.defaults import DEFAULT_SPEED_TOLERANCE_PCT
 
 # ── Freshness thresholds ─────────────────────────────────────────────────────
 # Engineering spec data stays valid for 90 days.
@@ -89,7 +91,7 @@ class MockIndustrialSearchProvider(SearchProvider):
                 "nominal_speed_rpm": 2400.0,
                 "nominal_torque_nm": 0.45,
                 "gear_ratio": 15.0,
-                "efficiency": None,  # Missing efficiency to test DATA_MISSING status
+                "efficiency": None,  # Missing efficiency to test DATA_INCOMPLETE status
                 "max_output_torque_nm": 5.5,
                 "availability_status": "AVAILABILITY_NOT_CONFIRMED",
                 "price": None,
@@ -455,7 +457,9 @@ def discover_and_evaluate_components(
     service_factor: float,
     max_voltage_v: float,
     provider: Optional[SearchProvider] = None,
-    top_n: int = 5
+    top_n: int = 5,
+    peak_torque_nm: Optional[float] = None,
+    speed_tolerance_pct: Optional[float] = None,
 ) -> List[Dict[str, Any]]:
     """
     Source B Internet Discovery Workflow (Stage 6.1 — with cache):
@@ -546,6 +550,7 @@ def discover_and_evaluate_components(
     # ── Calculate engineering targets using existing engine logic ────────────
     design_torque = calculate_design_torque(required_torque_nm, service_factor).result
     req_power_w   = calculate_mechanical_power(design_torque, required_speed_rpm).result
+    design_peak   = peak_torque_nm * service_factor if peak_torque_nm is not None else None
 
     discovered_evaluations = []
 
@@ -628,9 +633,10 @@ def discover_and_evaluate_components(
         calc_trace   = {}
         perf         = {}
         overall_status = "MEETS"
+        fit            = None
 
         if not is_complete:
-            overall_status = "DATA_MISSING"
+            overall_status = "DATA_INCOMPLETE"
             calc_trace = {
                 "error":       "Missing essential engineering specifications in external product record.",
                 "data_status": DATA_STATUS_DATA_INCOMPLETE
@@ -647,10 +653,35 @@ def discover_and_evaluate_components(
 
             torque_meets = calc_output_torque >= design_torque
             speed_meets  = output_speed_rpm  >= required_speed_rpm
+            if speed_tolerance_pct is not None:
+                speed_meets = speed_meets and output_speed_rpm <= required_speed_rpm * (1 + speed_tolerance_pct / 100)
 
             if not (torque_meets and speed_meets):
                 overall_status = "DOES_NOT_MEET"
                 continue
+
+            # Stage 8: peak torque check against the product's rated output torque
+            peak_trace = None
+            if design_peak is not None:
+                if comp.max_output_torque_nm is not None:
+                    if comp.max_output_torque_nm < design_peak:
+                        overall_status = "DOES_NOT_MEET"
+                        continue
+                    peak_status = "MEETS"
+                    peak_cmp = f"{comp.max_output_torque_nm} Nm (rated max output) >= {round(design_peak, 4)} Nm"
+                elif calc_output_torque >= design_peak:
+                    peak_status = "MEETS"
+                    peak_cmp = (f"{round(calc_output_torque, 4)} Nm (continuous output) >= {round(design_peak, 4)} Nm "
+                                f"— rated max output not stated")
+                else:
+                    peak_status = "DATA_INCOMPLETE"
+                    overall_status = "DATA_INCOMPLETE"
+                    peak_cmp = f"Rated max output torque not stated — cannot verify {round(design_peak, 4)} Nm peak"
+                peak_trace = {
+                    "formula":    "Rated max output torque ≥ T_peak × Service Factor",
+                    "comparison": peak_cmp,
+                    "status":     peak_status,
+                }
 
             calc_trace = {
                 "design_torque": {
@@ -676,6 +707,16 @@ def discover_and_evaluate_components(
                     "status":       "MEETS" if speed_meets else "DOES_NOT_MEET"
                 }
             }
+
+            if peak_trace:
+                calc_trace["peak_torque"] = peak_trace
+
+            if overall_status == "MEETS":
+                fit = compute_fit(
+                    calc_output_torque, design_torque, output_speed_rpm, required_speed_rpm,
+                    speed_tolerance_pct if speed_tolerance_pct is not None else DEFAULT_SPEED_TOLERANCE_PCT,
+                    comp.power_w * comp.efficiency if comp.power_w else None, req_power_w,
+                )
 
             perf = {
                 "output_speed_rpm":    round(output_speed_rpm, 2),
@@ -733,6 +774,7 @@ def discover_and_evaluate_components(
             "performance":        perf,
             "calculation_trace":  calc_trace,
             "engineering_status": overall_status,
+            "fit":                fit,
         })
 
     return discovered_evaluations[:top_n]
