@@ -8,6 +8,7 @@ from app.engine.recommend import get_recommendations
 from app.engine.trace import ValidationError
 from app.engine.sizing import size_application, SizingRequest
 from app.engine.bearing import bearing_life, BearingRequest
+from app.engine.method_eval import MethodPlan, evaluate_method
 
 router = APIRouter()
 
@@ -84,6 +85,27 @@ def parse_sizing(request: ParseRequirementsRequest):
     """
     from app.ai.sizing_parser import get_sizing_parser
     return get_sizing_parser().parse(request.text).model_dump()
+
+@router.post("/ask")
+def ask_question(request: ParseRequirementsRequest):
+    """
+    One entry point for any engineering question: decides the kind of calculation
+    (motor sizing, bearing life, or an AI-chosen method for other topics) and reads
+    the values the user wrote. Never returns calculated results.
+    """
+    from app.ai.assistant import ask
+    return ask(request.text).model_dump()
+
+
+class EvaluateMethodRequest(BaseModel):
+    plan: MethodPlan
+    values: dict = {}
+
+
+@router.post("/evaluate-method")
+def evaluate_method_route(request: EvaluateMethodRequest):
+    """Deterministically evaluates an AI-chosen method from the engineer's values."""
+    return evaluate_method(request.plan, request.values).model_dump()
 
 @router.post("/bearing-life")
 def bearing_life_check(request: BearingRequest):

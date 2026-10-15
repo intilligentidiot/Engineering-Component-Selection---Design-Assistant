@@ -89,7 +89,7 @@ These are **never** suggested, because they belong to the user's own machine: di
 
 ## 7. Bearing life (ISO 281)
 
-The new **Bearing Life** tab calculates ISO 281 *basic* rating life: P = X·Fr + Y·Fa, L10 = (C/P)^p with p = 3 for ball and 10/3 for roller bearings, L10h = L10·10⁶/(60·n). C, X and Y must come from the bearing catalogue and are never assumed. The modified-life factor a_ISO (lubrication and contamination) is **not** included, and the results page says so.
+Bearing questions typed into the main box (for example "ball bearing, radial load 2000 N at 1500 rpm…") run a checked module that calculates ISO 281 *basic* rating life: P = X·Fr + Y·Fa, L10 = (C/P)^p with p = 3 for ball and 10/3 for roller bearings, L10h = L10·10⁶/(60·n). C, X and Y must come from the bearing catalogue and are never assumed. The modified-life factor a_ISO (lubrication and contamination) is **not** included, and the results page says so.
 
 Reliability factor a1 used:
 
@@ -107,6 +107,25 @@ The tool classifies a machine by **what the motor has to move**, not by its name
 
 Machines whose physics is not covered (pumps, fans, compressors, mixers, crushers, presses, vehicles) are reported as **not supported yet**, and the user is pointed to the Advanced torque/RPM tab. Bearings are pointed to the Bearing Life tab. The tool never forces one of these into a supported type.
 
-## 9. Not yet supported
+## 9. Questions with no checked module ("Method chosen by AI")
+
+The main box accepts any engineering question. It first decides which kind of calculation is being asked for:
+
+| Kind | How it is calculated |
+|---|---|
+| Motor + gearbox sizing | Checked module (sections 1–6) |
+| Bearing life | Checked module (section 7) |
+| Anything else (shafts, bolts, belts, springs, pumps…) | **The AI chooses the method and formulas. The tool does every calculation itself** |
+
+For the third kind:
+- The AI returns the standard it follows, the inputs needed (with units) and the formulas. **It is not allowed to produce result numbers.**
+- The tool evaluates each formula itself, from the engineer's values, and shows every substitution ([`app/engine/method_eval.py`](../app/engine/method_eval.py)). Formulas may only contain plain arithmetic and standard maths functions; anything else is rejected before use.
+- A value counts as "given" only if the engineer's own words for it appear in the question. The AI may suggest a typical value for material or catalogue properties. That suggestion is shown in purple with its source, and never for the user's own dimensions, loads or speeds.
+- Every result is labelled **"AI METHOD — CHECK"**. The method and units must be checked by an engineer, because the tool cannot verify that the AI picked the right formula.
+- **This needs the AI switched on** (`AI_PROVIDER` + key). Without it, the tool says so and points to the Advanced tab.
+
+**Recommendation:** when a topic is used often, turn it into a checked module with its own hand-checked test, as was done for bearing life.
+
+## 10. Not yet supported
 
 Bulk-material conveyors (CEMA), screw conveyors, mixers, pumps and fans, crushers, extruders, presses/punching, and vehicles. Each needs its own approved equations before it is added.

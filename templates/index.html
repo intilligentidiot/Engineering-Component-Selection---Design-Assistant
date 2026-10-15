@@ -7,7 +7,7 @@
     <meta name="description" content="Professional engineering decision-support tool for motor and gearbox selection by Tesla Mechanical Designs.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/style.css?v=8.3">
+    <link rel="stylesheet" href="/static/css/style.css?v=8.4">
 </head>
 <body>
 
@@ -32,10 +32,7 @@
     <nav class="tab-nav">
         <div class="tab-nav-inner">
             <button class="tab-btn active" id="tab-size" data-tab="sizing">
-                <span class="tab-icon">🧮</span> Size My Application
-            </button>
-            <button class="tab-btn" id="tab-bearing" data-tab="bearing">
-                <span class="tab-icon">◎</span> Bearing Life
+                <span class="tab-icon">🧮</span> Engineering Assistant
             </button>
             <button class="tab-btn" id="tab-select" data-tab="selection">
                 <span class="tab-icon">⚙</span> Advanced: Torque &amp; RPM
@@ -58,20 +55,20 @@
         <div class="tab-content active" id="tab-content-sizing">
             <section class="panel input-panel">
                 <div class="panel-header">
-                    <h1>What does your machine need to do?</h1>
-                    <p>Describe it in your own words. We work out the speed, turning force and power it needs — showing every step — and find motor + gearbox combinations that can do it.</p>
+                    <h1>What do you need to calculate?</h1>
+                    <p>Describe your machine or ask an engineering question in your own words. Motor + gearbox sizing and bearing life use checked calculations; other topics use a method chosen by the AI, with every number calculated by the tool and every step shown.</p>
                 </div>
 
                 <form id="sizing-form" novalidate>
                     <!-- Simple view: describe → review what we understood → answer only what is missing -->
                     <div id="sz-guided">
                         <div class="sz-ai-box">
-                            <textarea id="sz-ai-text" rows="4" placeholder="Example: Conveyor moving 20 plastic blocks 200x100x50 mm, density 1200 kg/m3, belt speed 0.5 m/s, 100 mm pulley, flat, 8 hours a day, 24 V."></textarea>
+                            <textarea id="sz-ai-text" rows="4" placeholder="Examples:&#10;• Conveyor moving 20 plastic blocks 200x100x50 mm, density 1200 kg/m3, belt speed 0.5 m/s, 100 mm pulley, flat&#10;• Ball bearing, radial load 2000 N at 1500 rpm, C = 14 kN, need 20000 hours life&#10;• Shaft diameter for 50 Nm torque, steel"></textarea>
                             <div class="sz-ai-actions">
                                 <button type="button" id="sz-ai-btn" class="btn-primary">Continue</button>
                                 <button type="button" id="sz-manual-btn" class="link-btn">or fill in the full form yourself</button>
                             </div>
-                            <p class="field-hint">Mention what you are moving (size or weight), the machine type, how fast, and how many hours a day. Only the numbers you write are used — nothing is guessed.</p>
+                            <p class="field-hint">Only the numbers you write are used as your values. Anything missing is asked, or filled with a clearly marked typical value you can change.</p>
                             <div id="sz-ai-feedback" hidden></div>
                         </div>
 
@@ -135,6 +132,29 @@
                         </div>
                     </div>
                 </form>
+
+                <!-- Bearing life and AI-method answers (assistant.js) -->
+                <div id="as-area" hidden>
+                    <div id="as-banner"></div>
+                    <h3 class="sz-step"><span>✓</span> What we understood</h3>
+                    <div id="as-understood" class="sz-chips"></div>
+                    <div id="as-needed-wrap" hidden>
+                        <h3 class="sz-step"><span>?</span> <span id="as-needed-title"></span></h3>
+                        <form id="as-form" class="form-grid" novalidate></form>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn-primary" id="as-calc">Calculate</button>
+                        <button type="button" class="btn-secondary" id="as-reset">Start over</button>
+                    </div>
+                </div>
+            </section>
+
+            <section class="panel" id="as-result-panel" hidden>
+                <div class="panel-header">
+                    <h2 id="as-result-title">Result</h2>
+                    <p id="as-result-sub"></p>
+                </div>
+                <div id="as-result"></div>
             </section>
 
             <!-- Calculation proof -->
@@ -144,32 +164,6 @@
                     <p id="sz-proof-sub"></p>
                 </div>
                 <div id="sz-proof"></div>
-            </section>
-        </div>
-
-        <!-- ══════════════════════════════════════════
-             TAB — BEARING LIFE (ISO 281)
-        ══════════════════════════════════════════ -->
-        <div class="tab-content" id="tab-content-bearing">
-            <section class="panel input-panel">
-                <div class="panel-header">
-                    <h1>Bearing Life Check</h1>
-                    <p>ISO 281 basic rating life. Enter the bearing's catalogue rating to see how long it will last — or leave it blank and enter the life you need to get the minimum rating to look for.</p>
-                </div>
-                <form id="bearing-form" novalidate>
-                    <div class="form-grid" id="br-fields"></div>
-                    <div class="form-actions">
-                        <button type="submit" class="btn-primary" id="br-submit-btn"><span class="btn-text">Calculate bearing life</span></button>
-                        <button type="reset" class="btn-secondary">Clear</button>
-                    </div>
-                </form>
-            </section>
-            <section class="panel" id="br-result-panel" hidden>
-                <div class="panel-header">
-                    <h2 id="br-result-title">Result</h2>
-                    <p id="br-result-sub"></p>
-                </div>
-                <div id="br-result"></div>
             </section>
         </div>
 
@@ -321,8 +315,8 @@
            <strong>Source B:</strong> Internet Discovery</p>
     </footer>
 
-    <script src="/static/js/main.js?v=8.3"></script>
-    <script src="/static/js/sizing.js?v=8.3"></script>
-    <script src="/static/js/bearing.js?v=8.3"></script>
+    <script src="/static/js/main.js?v=8.4"></script>
+    <script src="/static/js/sizing.js?v=8.4"></script>
+    <script src="/static/js/assistant.js?v=8.4"></script>
 </body>
 </html>

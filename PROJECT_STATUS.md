@@ -37,7 +37,7 @@
   - [x] Plain-text description pre-fills the sizing form (`app/ai/sizing_parser.py`, `POST /api/parse-sizing`; mock / Gemini / OpenAI). Every value must quote the user's own words verbatim or it is rejected; densities, friction, efficiency etc. are never supplied by the AI; the user ticks a confirmation box before calculating
 
 - **Engineer feedback round (2026-10-15):**
-  - [x] Bearing Life tab — ISO 281 basic rating life, or minimum C for a required life (`app/engine/bearing.py`, `POST /api/bearing-life`)
+  - [x] One box for any engineering question (`POST /api/ask`): motor sizing and bearing life (ISO 281, `app/engine/bearing.py`) use checked modules; other topics use a method chosen by the AI and evaluated step by step by the tool (`app/engine/method_eval.py`, `POST /api/evaluate-method`), labelled "check before use"
   - [x] Suggested values for missing inputs, from a reviewed reference list, clearly marked and listed in the result (`app/engine/sizing/suggestions.py`)
   - [x] Machines recognised by their motion, not a fixed name list; unsupported machines explained, never forced into a type
   - [x] Live on Railway (auto-deploys from `main`)

@@ -462,3 +462,11 @@ body {
 .sz-sug-head strong { color: #c9a8ff; }
 .sz-why { margin-top: 0.6rem; }
 .sz-chip em { font-style: normal; color: var(--silver-400); font-size: 0.78rem; }
+
+/* Answers that use a method chosen by the AI */
+.sz-note.ai-method { background: rgba(255,179,0,0.08); border: 1px solid rgba(255,179,0,0.45); color: var(--silver-200); }
+.sz-note.ai-method strong { color: var(--amber-400); }
+.as-plan-title { margin-top: 0.6rem; font-weight: 700; color: var(--silver-100); }
+.as-plan-title span { font-weight: 500; color: var(--silver-400); }
+#as-area[hidden], #as-needed-wrap[hidden] { display: none; }
+#as-area { margin-top: 1.5rem; }

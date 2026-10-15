@@ -1,0 +1,275 @@
+"""
+One entry point for any engineering question typed by the user.
+
+  1. route   — decide which kind of calculation is being asked for:
+               motor_sizing  → checked motor + gearbox sizing module
+               bearing_life  → checked ISO 281 bearing module
+               general       → no checked module: the AI chooses the method
+                               (MethodPlan) and the tool evaluates it
+  2. extract — read the values the user actually wrote (each must be quoted
+               verbatim from their text, or it is dropped)
+
+The AI never produces result numbers: checked modules and the deterministic
+method evaluator (app/engine/method_eval.py) do all arithmetic.
+
+Provider follows AI_PROVIDER (mock | gemini | openai). The mock provider is
+rule-based and cannot build methods for new topics.
+"""
+import os
+import re
+import logging
+from typing import Optional, List, Dict, Any, Type
+
+from pydantic import BaseModel, Field
+
+from app.ai.sizing_parser import get_sizing_parser, SizingParseResult, ProviderError, _norm, _MACHINE_NAMES
+from app.engine.method_eval import MethodPlan, validate_plan
+
+logger = logging.getLogger(__name__)
+
+TOPICS = ("motor_sizing", "bearing_life", "general")
+
+
+# ─────────────────────────────────────────────────────────────
+# Structured-output call shared by the real providers
+# ─────────────────────────────────────────────────────────────
+
+def _provider() -> str:
+    return os.environ.get("AI_PROVIDER", "mock").strip().lower()
+
+
+def call_structured(schema: Type[BaseModel], system: str, text: str) -> BaseModel:
+    provider = _provider()
+    if provider == "gemini":
+        key = os.environ.get("GEMINI_API_KEY")
+        if not key:
+            raise ProviderError("ERROR_CONFIGURATION_MISSING", "GEMINI_API_KEY is missing.")
+        from app.ai import gemini_parser as gp
+        if not gp._GENAI_AVAILABLE:
+            raise ProviderError("ERROR_CONFIGURATION_MISSING", "google-genai SDK is not installed.")
+        client = gp.genai.Client(api_key=key)
+        resp = client.models.generate_content(
+            model=os.environ.get("GEMINI_MODEL", "gemini-2.5-flash"), contents=text,
+            config=gp.genai_types.GenerateContentConfig(system_instruction=system, response_mime_type="application/json",
+                                                        response_schema=schema, temperature=0.0))
+        if getattr(resp, "parsed", None) is not None:
+            return resp.parsed
+        import json
+        return schema(**json.loads(resp.text or "{}"))
+    if provider == "openai":
+        key = os.environ.get("OPENAI_API_KEY")
+        if not key:
+            raise ProviderError("ERROR_CONFIGURATION_MISSING", "OPENAI_API_KEY is missing.")
+        from app.ai import openai_parser as op
+        if not op._OPENAI_AVAILABLE:
+            raise ProviderError("ERROR_CONFIGURATION_MISSING", "openai SDK is not installed.")
+        client = op.OpenAI(api_key=key)
+        resp = client.responses.parse(model=os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
+                                      input=[{"role": "system", "content": system}, {"role": "user", "content": text}],
+                                      text_format=schema)
+        return resp.output_parsed
+    raise ProviderError("AI_NOT_CONFIGURED", "AI is not switched on for this tool.")
+
+
+# ─────────────────────────────────────────────────────────────
+# 1. Routing
+# ─────────────────────────────────────────────────────────────
+
+class TopicRouting(BaseModel):
+    topic: str = Field(..., description="motor_sizing, bearing_life or general.")
+    reason: str = Field(..., description="One plain-English sentence explaining the choice.")
+
+
+ROUTER_INSTRUCTION = (
+    "Decide what kind of engineering calculation the user is asking for. "
+    "motor_sizing: choosing or sizing a motor / gearbox / drive for a machine that moves something "
+    "(conveyor, lift, turntable, linear axis, winder, or any machine with such a motion). "
+    "bearing_life: rolling bearing life, load rating or bearing selection (ISO 281, L10). "
+    "general: any other engineering calculation (shafts, keys, belts, gears, bolts, springs, pumps, fans, "
+    "beams, heat, flow...). Reply with the topic and one short reason."
+)
+
+_BEARING_RE = re.compile(r"\bbearings?\b|\bL10h?\b|ISO\s*281|rating life|dynamic load rating", re.IGNORECASE)
+_MOTOR_RE = re.compile(r"\b(?:motors?|gear ?box(?:es)?|gear ?motors?)\b", re.IGNORECASE)
+
+
+def _mock_route(text: str) -> TopicRouting:
+    machine = any(re.search(p, text, re.IGNORECASE) for _, p in _MACHINE_NAMES)
+    if _BEARING_RE.search(text) and not machine:
+        return TopicRouting(topic="bearing_life", reason="Your question is about a bearing's load or life.")
+    if machine or _MOTOR_RE.search(text):
+        return TopicRouting(topic="motor_sizing", reason="Your question is about sizing the drive for a machine.")
+    return TopicRouting(topic="general", reason="Your question is not motor sizing or bearing life.")
+
+
+def route(text: str) -> TopicRouting:
+    if _provider() == "mock":
+        return _mock_route(text)
+    try:
+        r = call_structured(TopicRouting, ROUTER_INSTRUCTION, text)
+        if r.topic in TOPICS:
+            return r
+    except Exception as e:  # fall back to rules rather than failing the request
+        logger.error("[Assistant] routing failed: %s", type(e).__name__)
+    return _mock_route(text)
+
+
+# ─────────────────────────────────────────────────────────────
+# 2a. Bearing values
+# ─────────────────────────────────────────────────────────────
+
+class _Quote(BaseModel):
+    field: str
+    quote: str
+
+
+class BearingExtraction(BaseModel):
+    bearing_type: Optional[str] = Field(None, description="'ball' or 'roller' (tapered, cylindrical, spherical and needle are roller).")
+    radial_load_n: Optional[float] = Field(None, description="Radial load in N (convert kN × 1000).")
+    axial_load_n: Optional[float] = Field(None, description="Axial / thrust load in N.")
+    x_factor: Optional[float] = Field(None, description="Radial factor X, only if stated.")
+    y_factor: Optional[float] = Field(None, description="Axial factor Y, only if stated.")
+    speed_rpm: Optional[float] = Field(None, description="Shaft speed in rpm.")
+    dynamic_rating_kn: Optional[float] = Field(None, description="Basic dynamic load rating C in kN, only if stated.")
+    required_life_h: Optional[float] = Field(None, description="Required life in hours.")
+    reliability_pct: Optional[float] = Field(None, description="Required reliability in %, only if stated.")
+    quotes: List[_Quote] = Field(default_factory=list, description="One entry per non-null field with the user's exact words.")
+
+
+BEARING_INSTRUCTION = (
+    "Extract rolling-bearing inputs the user actually wrote. Convert units to those in the field descriptions and "
+    "copy the user's original words into quotes, one per non-null field. Never supply C, X, Y or any value from "
+    "your own knowledge — leave it null."
+)
+
+_N = r"(\d+(?:\.\d+)?)"
+
+
+def _mock_bearing(text: str) -> BearingExtraction:
+    out: Dict[str, Any] = {}
+    quotes: List[_Quote] = []
+
+    def take(field, pattern, conv):
+        if field in out:
+            return
+        m = re.search(pattern, text, re.IGNORECASE)
+        if m:
+            out[field] = conv(m)
+            quotes.append(_Quote(field=field, quote=m.group(0)))
+
+    force = lambda m: float(m.group(1)) * (1000 if m.group(2).lower() == "kn" else 1)
+    take("bearing_type", r"\b(ball|roller|tapered|cylindrical|spherical|needle)\b",
+         lambda m: "ball" if m.group(1).lower() == "ball" else "roller")
+    take("axial_load_n", r"(?:axial|thrust|Fa)\s*(?:load|force)?\s*(?:of|=|:|is)?\s*" + _N + r"\s*(kN|N)\b", force)
+    take("axial_load_n", _N + r"\s*(kN|N)\s*(?:axial|thrust)", force)
+    take("radial_load_n", r"(?:radial|Fr)\s*(?:load|force)?\s*(?:of|=|:|is)?\s*" + _N + r"\s*(kN|N)\b", force)
+    take("radial_load_n", _N + r"\s*(kN|N)\s*radial", force)
+    if "radial_load_n" not in out:
+        take("radial_load_n", r"(?:bearing\s+)?load\s*(?:of|=|:|is)?\s*" + _N + r"\s*(kN|N)\b", force)
+    take("speed_rpm", _N + r"\s*(?:rpm|rev/min|r/min)\b", lambda m: float(m.group(1)))
+    take("dynamic_rating_kn", r"(?:\bC\b|dynamic (?:load )?rating|load rating)\s*(?:of|=|:|is)?\s*" + _N + r"\s*kN", lambda m: float(m.group(1)))
+    take("required_life_h", r"(?:life|L10h?)\s*(?:of|=|:|is)?\s*" + _N + r"\s*(?:h|hrs?|hours?)\b", lambda m: float(m.group(1)))
+    take("required_life_h", _N + r"\s*(?:h|hrs?|hours?)\s*(?:of\s+)?(?:life|service)", lambda m: float(m.group(1)))
+    take("x_factor", r"\bX\s*=\s*" + _N, lambda m: float(m.group(1)))
+    take("y_factor", r"\bY\s*=\s*" + _N, lambda m: float(m.group(1)))
+    take("reliability_pct", _N + r"\s*%\s*reliab", lambda m: float(m.group(1)))
+    return BearingExtraction(**out, quotes=quotes)
+
+
+class ExtractedField(BaseModel):
+    field: str
+    value: Any
+    quote: str
+
+
+def extract_bearing(text: str) -> List[ExtractedField]:
+    ex = _mock_bearing(text) if _provider() == "mock" else call_structured(BearingExtraction, BEARING_INSTRUCTION, text)
+    quotes = {q.field: q.quote for q in ex.quotes}
+    norm_text = _norm(text)
+    out = []
+    for field in BearingExtraction.model_fields:
+        if field == "quotes":
+            continue
+        val = getattr(ex, field)
+        q = quotes.get(field)
+        if val is None or not q or _norm(q) not in norm_text:
+            continue
+        if field == "bearing_type" and val not in ("ball", "roller"):
+            continue
+        if field != "bearing_type" and (not isinstance(val, (int, float)) or val < 0 or not re.search(r"\d", q)):
+            continue
+        out.append(ExtractedField(field=field, value=val, quote=q))
+    return out
+
+
+# ─────────────────────────────────────────────────────────────
+# 2b. AI-chosen method for other topics
+# ─────────────────────────────────────────────────────────────
+
+METHOD_INSTRUCTION = (
+    "You are an engineering calculation planner. For the user's question, choose the appropriate recognised method "
+    "or standard and return it as a MethodPlan: the inputs needed (with units), and the calculation as a sequence of "
+    "formulas. Rules: "
+    "1) Do NOT compute any results yourself — only write formulas; the tool evaluates them. "
+    "2) Formulas may use only earlier symbols, numbers, + - * / ** and the listed maths functions, with unit "
+    "conversion factors written explicitly so units are consistent. "
+    "3) Fill an input's value only if the user stated it, and copy their exact words into quote. "
+    "4) You may give a typical_value with a typical_note (source and usual range) for material or catalogue "
+    "properties, but never for the user's own dimensions, loads, speeds or operating conditions. "
+    "5) Name the standard in `standard` and list limitations honestly. Keep it to the steps an engineer would show."
+)
+
+
+def plan_method(text: str) -> MethodPlan:
+    plan = call_structured(MethodPlan, METHOD_INSTRUCTION, text)
+    norm_text = _norm(text)
+    for i in plan.inputs:   # a value counts as "given" only if the user's words are really in the text
+        if i.value is not None and not (i.quote and _norm(i.quote) in norm_text and re.search(r"\d", i.quote)):
+            i.value, i.quote = None, None
+    return plan
+
+
+# ─────────────────────────────────────────────────────────────
+# Orchestration
+# ─────────────────────────────────────────────────────────────
+
+class AskResult(BaseModel):
+    topic: str
+    reason: str
+    provider: str
+    sizing: Optional[SizingParseResult] = None
+    bearing_values: List[ExtractedField] = []
+    plan: Optional[MethodPlan] = None
+    message: Optional[str] = None
+    status: str = "OK"   # OK | AI_NOT_CONFIGURED | INVALID_PLAN | ERROR
+
+
+AI_OFF_MESSAGE = ("This question needs the AI to choose a calculation method, and the AI is not switched on for "
+                  "this tool yet (set AI_PROVIDER and an API key). Motor sizing and bearing life work without it. "
+                  "If you already know the torque and speed, use the 'Advanced: Torque & RPM' tab.")
+
+
+def ask(text: str) -> AskResult:
+    provider = _provider()
+    r = route(text)
+    res = AskResult(topic=r.topic, reason=r.reason, provider=provider)
+    try:
+        if r.topic == "motor_sizing":
+            res.sizing = get_sizing_parser().parse(text)
+        elif r.topic == "bearing_life":
+            res.bearing_values = extract_bearing(text)
+        else:
+            plan = plan_method(text)
+            problems = validate_plan(plan)
+            if problems:
+                res.status, res.message = "INVALID_PLAN", ("The AI's method could not be checked, so it was not used: "
+                                                           + " ".join(problems[:3]) + " Try rephrasing the question.")
+            else:
+                res.plan = plan
+    except ProviderError as e:
+        res.status = "AI_NOT_CONFIGURED" if e.status in ("AI_NOT_CONFIGURED", "ERROR_CONFIGURATION_MISSING") else "ERROR"
+        res.message = AI_OFF_MESSAGE if res.status == "AI_NOT_CONFIGURED" else e.message
+    except Exception as e:
+        logger.error("[Assistant] %s failed: %s", r.topic, type(e).__name__)
+        res.status, res.message = "ERROR", f"The question could not be processed ({type(e).__name__}). Please try again or rephrase."
+    return res

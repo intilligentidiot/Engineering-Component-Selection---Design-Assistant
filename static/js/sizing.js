@@ -272,7 +272,7 @@
             missingPaths.clear(); aiQuotes.clear(); suggested.clear(); appConfirmed = false;
             machineAsWritten = null; machineExplanation = null;
             appSelect.value = "conveyor"; aiText.value = "";
-            aiFeedback.hidden = true; proofPanel.hidden = true; resultsPanel.hidden = true; errorPanel.hidden = true;
+            aiFeedback.hidden = true; proofPanel.hidden = true; window.Assistant?.hide(); resultsPanel.hidden = true; errorPanel.hidden = true;
             render(); setMode("start");
         });
     });
@@ -283,7 +283,16 @@
         if (!text) { aiText.focus(); return; }
         aiBtn.disabled = true; aiBtn.textContent = "Reading...";
         try {
-            const data = await post("/api/parse-sizing", { text });
+            // One entry point decides the kind of calculation; only motor sizing is handled here
+            const asked = await post("/api/ask", { text });
+            if (asked.topic !== "motor_sizing") {
+                setMode("start"); aiFeedback.hidden = true;
+                proofPanel.hidden = true; resultsPanel.hidden = true; errorPanel.hidden = true;
+                await window.Assistant.show(asked);
+                return;
+            }
+            window.Assistant?.hide();
+            const data = asked.sizing;
             [...aiQuotes.keys(), ...suggested.keys()].forEach(p => { if (p !== "application") delete values[p]; });  // replace the previous reading
             aiQuotes.clear(); suggested.clear();
             machineAsWritten = data.machine_as_written || null;
