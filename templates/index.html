@@ -7,7 +7,7 @@
     <meta name="description" content="Professional engineering decision-support tool for motor and gearbox selection by Tesla Mechanical Designs.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/style.css?v=8.4">
+    <link rel="stylesheet" href="/static/css/style.css?v=8.5">
 </head>
 <body>
 
@@ -63,7 +63,7 @@
                     <!-- Simple view: describe → review what we understood → answer only what is missing -->
                     <div id="sz-guided">
                         <div class="sz-ai-box">
-                            <textarea id="sz-ai-text" rows="4" placeholder="Examples:&#10;• Conveyor moving 20 plastic blocks 200x100x50 mm, density 1200 kg/m3, belt speed 0.5 m/s, 100 mm pulley, flat&#10;• Ball bearing, radial load 2000 N at 1500 rpm, C = 14 kN, need 20000 hours life&#10;• Shaft diameter for 50 Nm torque, steel"></textarea>
+                            <textarea id="sz-ai-text" rows="4" placeholder="Examples:&#10;• Conveyor moving 20 plastic blocks 200x100x50 mm, density 1200 kg/m3, belt speed 0.5 m/s, 100 mm pulley, flat&#10;• Ball bearing, radial load 2000 N at 1500 rpm, C = 14 kN, need 20000 hours life&#10;• I'm designing a twin-shaft plastic shredder, 300 mm rotor, 20 rpm, 400 V&#10;• Shaft diameter for 50 Nm torque, steel"></textarea>
                             <div class="sz-ai-actions">
                                 <button type="button" id="sz-ai-btn" class="btn-primary">Continue</button>
                                 <button type="button" id="sz-manual-btn" class="link-btn">or fill in the full form yourself</button>
@@ -146,6 +146,20 @@
                         <button type="button" class="btn-primary" id="as-calc">Calculate</button>
                         <button type="button" class="btn-secondary" id="as-reset">Start over</button>
                     </div>
+                </div>
+
+                <!-- Whole-project calculation plan (project.js) -->
+                <div id="pj-area" hidden>
+                    <div id="pj-head"></div>
+                    <h3 class="sz-step"><span>1</span> Information needed</h3>
+                    <div id="pj-info"></div>
+                    <div class="form-actions">
+                        <button type="button" class="btn-primary" id="pj-calc">Calculate the project</button>
+                        <button type="button" class="btn-secondary" id="pj-reset">Start over</button>
+                    </div>
+                    <h3 class="sz-step" id="pj-calcs-head"><span>2</span> Calculations, in order <span class="pj-progress" id="pj-progress"></span></h3>
+                    <div id="pj-calcs"></div>
+                    <div id="pj-limits"></div>
                 </div>
             </section>
 
@@ -315,8 +329,9 @@
            <strong>Source B:</strong> Internet Discovery</p>
     </footer>
 
-    <script src="/static/js/main.js?v=8.4"></script>
-    <script src="/static/js/sizing.js?v=8.4"></script>
-    <script src="/static/js/assistant.js?v=8.4"></script>
+    <script src="/static/js/main.js?v=8.5"></script>
+    <script src="/static/js/sizing.js?v=8.5"></script>
+    <script src="/static/js/assistant.js?v=8.5"></script>
+    <script src="/static/js/project.js?v=8.5"></script>
 </body>
 </html>

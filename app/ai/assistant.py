@@ -24,10 +24,11 @@ from pydantic import BaseModel, Field
 
 from app.ai.sizing_parser import get_sizing_parser, SizingParseResult, ProviderError, _norm, _MACHINE_NAMES
 from app.engine.method_eval import MethodPlan, validate_plan
+from app.engine.project import ProjectPlan, validate_project, shredder_template
 
 logger = logging.getLogger(__name__)
 
-TOPICS = ("motor_sizing", "bearing_life", "general")
+TOPICS = ("project", "motor_sizing", "bearing_life", "general")
 
 
 # ─────────────────────────────────────────────────────────────
@@ -76,12 +77,15 @@ def call_structured(schema: Type[BaseModel], system: str, text: str) -> BaseMode
 # ─────────────────────────────────────────────────────────────
 
 class TopicRouting(BaseModel):
-    topic: str = Field(..., description="motor_sizing, bearing_life or general.")
+    topic: str = Field(..., description="project, motor_sizing, bearing_life or general.")
     reason: str = Field(..., description="One plain-English sentence explaining the choice.")
 
 
 ROUTER_INSTRUCTION = (
     "Decide what kind of engineering calculation the user is asking for. "
+    "project: the user describes a whole machine or project they are designing or modifying (e.g. 'I am building a "
+    "shredding machine', 'new project: a bottle capper') and needs to know what to calculate and what information "
+    "is needed — several calculations for several parts. "
     "motor_sizing: choosing or sizing a motor / gearbox / drive for a machine that moves something "
     "(conveyor, lift, turntable, linear axis, winder, or any machine with such a motion). "
     "bearing_life: rolling bearing life, load rating or bearing selection (ISO 281, L10). "
@@ -93,7 +97,12 @@ _BEARING_RE = re.compile(r"\bbearings?\b|\bL10h?\b|ISO\s*281|rating life|dynamic
 _MOTOR_RE = re.compile(r"\b(?:motors?|gear ?box(?:es)?|gear ?motors?)\b", re.IGNORECASE)
 
 
+_PROJECT_RE = re.compile(r"\bshred(?:der|ding|s)?\b", re.IGNORECASE)
+
+
 def _mock_route(text: str) -> TopicRouting:
+    if _PROJECT_RE.search(text):
+        return TopicRouting(topic="project", reason="You described a shredding machine, so the full calculation plan is shown.")
     machine = any(re.search(p, text, re.IGNORECASE) for _, p in _MACHINE_NAMES)
     if _BEARING_RE.search(text) and not machine:
         return TopicRouting(topic="bearing_life", reason="Your question is about a bearing's load or life.")
@@ -230,6 +239,75 @@ def plan_method(text: str) -> MethodPlan:
 
 
 # ─────────────────────────────────────────────────────────────
+# 2c. Whole-project calculation plan
+# ─────────────────────────────────────────────────────────────
+
+PROJECT_INSTRUCTION = (
+    "You are planning the engineering calculations for the user's machine project. Return a ProjectPlan: "
+    "every piece of information needed (inputs, with units and where the engineer gets each one) and every "
+    "calculation needed, in the order an engineer would do them, so that results feed later steps. "
+    "Rules: "
+    "1) Use kind 'motor_selection' for choosing the motor + gearbox (link required_speed_rpm, required_torque_nm, "
+    "service_factor, max_voltage_v) and kind 'bearing_life' for rolling bearings (link radial_load_n, speed_rpm and "
+    "required_life_h and/or dynamic_rating_kn; set bearing_type). Use kind 'formula' for everything else. "
+    "2) Do NOT compute results — only write formulas; the tool evaluates them. Formulas may use only earlier symbols, "
+    "numbers, + - * / ** and the listed maths functions, with unit conversion factors written explicitly. "
+    "3) Fill an input's value only if the user stated it, with their exact words in quote. "
+    "4) typical_value only for material or catalogue properties, with typical_note giving the source and range; "
+    "never for the user's own dimensions, loads, speeds or operating conditions. "
+    "5) Name standards where they apply and list limitations honestly. "
+    "6) Keep it practical: the calculations a design engineer must show for this machine, typically 5 to 10."
+)
+
+_SHRED_VALUES = [
+    ("n", r"(\d+(?:\.\d+)?)\s*(?:rpm|rev/min)\b", 1.0),
+    ("D", r"(?:rotor|cutter|blade)\s*(?:diameter|dia\.?)\s*(?:of|is|:)?\s*(\d+(?:\.\d+)?)\s*mm", 1.0),
+    ("D", r"(\d+(?:\.\d+)?)\s*mm\s*(?:rotor|cutter|blade)s?\b", 1.0),
+    ("t", r"(\d+(?:\.\d+)?)\s*mm\s*thick", 1.0),
+    ("b", r"(?:blade|cutter)s?\s*(?:width|wide)\s*(?:of|is|:)?\s*(\d+(?:\.\d+)?)\s*mm", 1.0),
+    ("tau_s", r"shear strength\s*(?:of|is|:)?\s*(\d+(?:\.\d+)?)\s*MPa", 1.0),
+    ("L", r"bearing (?:span|distance)\s*(?:of|is|:)?\s*(\d+(?:\.\d+)?)\s*mm", 1.0),
+    ("life_req", r"(\d+(?:\.\d+)?)\s*(?:h|hours?)\s*(?:of\s+)?(?:bearing\s+)?life", 1.0),
+    ("V", r"(\d+(?:\.\d+)?)\s*(?:v|volts?|vac|vdc)\b", 1.0),
+]
+
+
+def _mock_project(text: str) -> ProjectPlan:
+    if not _PROJECT_RE.search(text):
+        raise ProviderError("AI_NOT_CONFIGURED", "AI is not switched on for this tool.")
+    m = _PROJECT_RE.search(text)
+    plan = shredder_template(machine=m.group(0))
+    by_symbol = {i.symbol: i for i in plan.inputs}
+    if re.search(r"\btwin[- ]shaft|\btwo[- ]shaft|\bdouble[- ]shaft", text, re.IGNORECASE):
+        q = re.search(r"\btwin[- ]shaft|\btwo[- ]shaft|\bdouble[- ]shaft", text, re.IGNORECASE).group(0)
+        by_symbol["N_sh"].value, by_symbol["N_sh"].quote = 2, q
+    elif re.search(r"\bsingle[- ]shaft", text, re.IGNORECASE):
+        q = re.search(r"\bsingle[- ]shaft", text, re.IGNORECASE).group(0)
+        by_symbol["N_sh"].value, by_symbol["N_sh"].quote = 1, q
+    for sym, pat, k in _SHRED_VALUES:
+        inp = by_symbol[sym]
+        if inp.value is not None:
+            continue
+        mm = re.search(pat, text, re.IGNORECASE)
+        if mm:
+            inp.value, inp.quote = float(mm.group(1)) * k, mm.group(0)
+    return plan
+
+
+def plan_project(text: str) -> ProjectPlan:
+    if _provider() == "mock":
+        return _mock_project(text)
+    plan = call_structured(ProjectPlan, PROJECT_INSTRUCTION, text)
+    plan.origin = "AI"
+    norm_text = _norm(text)
+    for i in plan.inputs:   # a value counts as "given" only if the user's words are really in the text
+        if i.value is not None and not (i.quote and _norm(i.quote) in norm_text
+                                        and (re.search(r"\d", i.quote) or i.symbol.lower().startswith("n_sh"))):
+            i.value, i.quote = None, None
+    return plan
+
+
+# ─────────────────────────────────────────────────────────────
 # Orchestration
 # ─────────────────────────────────────────────────────────────
 
@@ -240,6 +318,7 @@ class AskResult(BaseModel):
     sizing: Optional[SizingParseResult] = None
     bearing_values: List[ExtractedField] = []
     plan: Optional[MethodPlan] = None
+    project: Optional[ProjectPlan] = None
     message: Optional[str] = None
     status: str = "OK"   # OK | AI_NOT_CONFIGURED | INVALID_PLAN | ERROR
 
@@ -254,7 +333,15 @@ def ask(text: str) -> AskResult:
     r = route(text)
     res = AskResult(topic=r.topic, reason=r.reason, provider=provider)
     try:
-        if r.topic == "motor_sizing":
+        if r.topic == "project":
+            project = plan_project(text)
+            problems = validate_project(project)
+            if problems:
+                res.status, res.message = "INVALID_PLAN", ("The AI's project plan could not be checked, so it was not used: "
+                                                           + " ".join(problems[:3]) + " Try rephrasing the question.")
+            else:
+                res.project = project
+        elif r.topic == "motor_sizing":
             res.sizing = get_sizing_parser().parse(text)
         elif r.topic == "bearing_life":
             res.bearing_values = extract_bearing(text)

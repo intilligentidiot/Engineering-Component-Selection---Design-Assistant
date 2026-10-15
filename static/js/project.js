@@ -1,0 +1,149 @@
+/* Tesla Mechanical Designs — whole-project calculation plan
+ *
+ * Shows, for a machine project, the information needed (have / missing / where
+ * to get it) and every calculation in order. /api/project-evaluate runs the
+ * calculations; results flow from one step to the next. No maths here.
+ */
+
+(() => {
+    const $ = id => document.getElementById(id);
+    const area = $("pj-area");
+    if (!area) return;
+
+    const head = $("pj-head"), info = $("pj-info"), calcs = $("pj-calcs"), calcBtn = $("pj-calc"), progress = $("pj-progress");
+    const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const fmt = x => (x === null || x === undefined) ? "—"
+        : Math.abs(x) >= 1e4 ? Math.round(x).toLocaleString() : String(Number(Number(x).toPrecision(4)));
+
+    let plan = null, values = {}, quotes = {}, typical = {};
+
+    function hide() { area.hidden = true; plan = null; values = {}; quotes = {}; typical = {}; }
+
+    async function show(data) {
+        hide();
+        plan = data.project;
+        plan.inputs.forEach(i => {
+            if (i.value !== null && i.value !== undefined) { values[i.symbol] = i.value; quotes[i.symbol] = i.quote; }
+            else if (i.typical_value !== null && i.typical_value !== undefined) { values[i.symbol] = i.typical_value; typical[i.symbol] = i.typical_note || "typical value"; }
+        });
+        const ai = plan.origin === "AI";
+        head.innerHTML = `
+            <div class="sz-note ${ai ? "ai-method" : "info"}">
+                <strong>${ai ? "⚠ Plan and methods chosen by AI — check before use." : "Built-in calculation plan (not yet approved by an engineer)."}</strong>
+                ${ai ? "Every number is calculated by the tool from your inputs and every step is shown, but the method must be checked by an engineer." : ""}
+                ${ai ? "" : "Motor + gearbox selection and bearing life use the tool's checked calculations."}
+            </div>
+            <h2 class="pj-title">${esc(plan.title)}</h2>
+            <p class="field-hint">${esc(plan.summary)}</p>`;
+        renderInfo();
+        $("pj-limits").innerHTML = (plan.limitations || []).length
+            ? `<div class="sz-note warn"><strong>Limitations of this plan</strong><ul>${plan.limitations.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>` : "";
+        area.hidden = false;
+        await evaluate();
+        area.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    // ── 1. Information needed ────────────────────────────────
+    function statusTag(i) {
+        if (quotes[i.symbol] && values[i.symbol] !== "" && values[i.symbol] !== undefined) return `<span class="pj-tag have" title="From your text: “${esc(quotes[i.symbol])}”">✓ from your text</span>`;
+        if (typical[i.symbol]) return `<span class="pj-tag sug" title="${esc(typical[i.symbol])}">suggested</span>`;
+        if (values[i.symbol] !== undefined && values[i.symbol] !== "") return `<span class="pj-tag have">✓ entered</span>`;
+        return i.optional ? `<span class="pj-tag opt">optional</span>` : `<span class="pj-tag need">needed</span>`;
+    }
+
+    function renderInfo() {
+        const have = plan.inputs.filter(i => values[i.symbol] !== undefined && values[i.symbol] !== "").length;
+        info.innerHTML = `<p class="field-hint pj-count">You have <strong>${have}</strong> of <strong>${plan.inputs.length}</strong>. Fill in what you can — every calculation that has its information runs straight away.</p>` +
+            plan.inputs.map(i => `
+            <div class="pj-row${typical[i.symbol] ? " suggested" : ""}" data-row="${i.symbol}">
+                <div class="pj-name">${esc(i.name)} ${statusTag(i)}
+                    <div class="pj-src">${typical[i.symbol] ? "Suggested: " + esc(typical[i.symbol]) : "Where to get it: " + esc(i.source_hint)}</div></div>
+                <div class="input-row pj-input"><input type="number" step="any" data-pj="${i.symbol}" value="${esc(values[i.symbol] ?? "")}">${i.unit ? `<span class="unit-badge">${esc(i.unit)}</span>` : ""}</div>
+            </div>`).join("");
+    }
+
+    info.addEventListener("input", e => {
+        const k = e.target.dataset.pj;
+        if (!k) return;
+        values[k] = e.target.value;
+        delete quotes[k]; delete typical[k];
+        const row = e.target.closest(".pj-row");
+        row.classList.remove("suggested");
+        const i = plan.inputs.find(x => x.symbol === k);
+        row.querySelector(".pj-tag").outerHTML = statusTag(i);
+        row.querySelector(".pj-src").textContent = "Where to get it: " + i.source_hint;
+    });
+    info.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); calcBtn.click(); } });
+
+    // ── 2. Calculations ──────────────────────────────────────
+    async function evaluate() {
+        const vals = Object.fromEntries(plan.inputs.map(i => [i.symbol, values[i.symbol] === undefined || values[i.symbol] === "" ? null : Number(values[i.symbol])]));
+        let r;
+        try {
+            const res = await fetch(`${API}/api/project-evaluate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ plan, values: vals }) });
+            r = await res.json();
+            if (!res.ok) throw new Error(typeof r.detail === "string" ? r.detail : "The plan could not be calculated.");
+        } catch (err) {
+            calcs.innerHTML = `<div class="sz-note danger">${esc(err.message)}</div>`; return;
+        }
+        if (r.status !== "EVALUATED") { calcs.innerHTML = `<div class="sz-note danger"><ul>${(r.errors || []).map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>`; return; }
+        renderInfo();
+        const done = r.calculations.filter(c => c.status === "DONE").length;
+        progress.textContent = `${done} of ${r.calculations.length} calculations done`;
+        calcs.innerHTML = plan.calculations.map((c, idx) => card(c, r.calculations[idx], idx + 1)).join("");
+    }
+
+    const badge = s => ({ DONE: `<span class="data-status MEETS">DONE</span>`, WAITING: `<span class="data-status DISCOVERED">WAITING</span>`,
+                          ERROR: `<span class="data-status DOES_NOT_MEET">CHECK INPUTS</span>` }[s] || "");
+
+    function card(c, r, n) {
+        let bodyHtml = "";
+        if (r.status === "WAITING") {
+            bodyHtml = `<div class="pj-wait">Needs: ${r.waiting_for.map(esc).join(", ")}</div>`;
+        } else if (r.status === "ERROR") {
+            bodyHtml = `<div class="sz-note danger"><ul>${r.errors.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>`;
+        } else if (c.kind === "formula") {
+            bodyHtml = `<div class="pj-results">${r.steps.map(s => `<div class="pj-res"><span>${esc(s.name)}</span><strong>${fmt(s.result)} ${esc(s.unit)}</strong></div>`).join("")}</div>
+                <details class="sz-details"><summary>Show working</summary><ol class="sz-steps">${r.steps.map((s, i) => `
+                    <li class="sz-stepline"><div class="sz-step-head"><span class="sz-step-n">${i + 1}</span> ${esc(s.name)}</div>
+                    <div class="sz-formula">${esc(s.formula)}</div><div class="sz-subst">${esc(s.substitution)}</div>
+                    ${s.note ? `<div class="sz-step-note">${esc(s.note)}</div>` : ""}</li>`).join("")}</ol></details>`;
+        } else if (c.kind === "bearing_life") {
+            const b = r.bearing;
+            const st = { MEETS: badge("DONE").replace("DONE", "MEETS"), DOES_NOT_MEET: `<span class="data-status DOES_NOT_MEET">DOES NOT MEET</span>` }[b.status] || "";
+            bodyHtml = `<div class="pj-results">
+                ${b.life_h != null ? `<div class="pj-res"><span>Expected life (${esc(c.bearing_type)} bearing)</span><strong>${fmt(b.life_h)} h ${st}</strong></div>` : ""}
+                ${b.min_dynamic_rating_kn != null ? `<div class="pj-res"><span>Minimum dynamic load rating C</span><strong>${fmt(b.min_dynamic_rating_kn)} kN</strong></div>` : ""}
+                <div class="pj-res"><span>Equivalent load P</span><strong>${fmt(b.equivalent_load_n)} N</strong></div></div>
+                <details class="sz-details"><summary>Show working</summary><ol class="sz-steps">${b.steps.map((s, i) => `
+                    <li class="sz-stepline"><div class="sz-step-head"><span class="sz-step-n">${i + 1}</span> ${esc(s.label)}</div>
+                    <div class="sz-formula">${esc(s.formula)}</div><div class="sz-subst">${esc(s.substitution)}</div></li>`).join("")}</ol>
+                    ${(b.notes || []).map(x => `<p class="field-hint">${esc(x)}</p>`).join("")}</details>`;
+        } else {
+            const m = r.motors || [];
+            bodyHtml = m.length
+                ? `<div class="pj-results">${m.map((x, i) => `<div class="pj-res"><span>${i + 1}. ${esc(x.motor)} (${esc(x.motor_maker)}) + ${esc(x.gearbox)} ${x.ratio}:1</span>
+                    <strong>${fmt(x.output_torque_nm)} N·m @ ${fmt(x.output_speed_rpm)} rpm ${x.fit != null ? `<span class="fit-pill">${x.fit}% fit</span>` : ""}</strong></div>`).join("")}</div>`
+                : `<div class="pj-wait">No motor + gearbox in the built-in list can deliver ${fmt(r.used.required_torque_nm)} N·m × ${fmt(r.used.service_factor ?? 1)} at ${fmt(r.used.required_speed_rpm)} rpm on ${fmt(r.used.max_voltage_v)} V.
+                    The built-in list only has small motors — use these requirements with a supplier, or the Advanced tab with internet search.</div>`;
+        }
+        const noMatch = c.kind === "motor_selection" && r.status === "DONE" && !(r.motors || []).length;
+        const tag = noMatch ? `<span class="data-status DATA_INCOMPLETE">NO MATCH IN LIST</span>` : badge(r.status);
+        return `<div class="pj-card ${noMatch ? "waiting" : r.status.toLowerCase()}">
+            <div class="pj-card-head"><span class="pj-n">${n}</span><div><div class="pj-card-title">${esc(c.title)} ${tag}</div>
+                <div class="field-hint">${esc(c.purpose)}${c.standard ? ` · <em>${esc(c.standard)}</em>` : ""}${c.kind !== "formula" ? " · checked calculation" : ""}</div>
+                ${c.note ? `<div class="field-hint">${esc(c.note)}</div>` : ""}</div></div>
+            ${bodyHtml}</div>`;
+    }
+
+    calcBtn.addEventListener("click", async () => {
+        calcBtn.disabled = true; calcBtn.textContent = "Calculating...";
+        try { await evaluate(); } finally { calcBtn.disabled = false; calcBtn.textContent = "Calculate the project"; }
+        $("pj-calcs-head").scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    $("pj-reset").addEventListener("click", () => {
+        hide(); $("sz-ai-text").value = ""; $("sz-ai-text").focus();
+    });
+
+    window.Project = { show, hide };
+})();

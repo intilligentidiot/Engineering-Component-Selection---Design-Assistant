@@ -68,12 +68,14 @@
 
     // ── Show / hide ──────────────────────────────────────────
     function hide() {
+        window.Project?.hide();
         area.hidden = true; panel.hidden = true;
         topic = null; plan = null; values = {}; quotes = {}; typical = {};
     }
 
     async function show(data) {
         hide();
+        if (data.topic === "project" && data.status === "OK") { await window.Project.show(data); return; }
         topic = data.topic;
         area.hidden = false;
         if (data.status !== "OK") {

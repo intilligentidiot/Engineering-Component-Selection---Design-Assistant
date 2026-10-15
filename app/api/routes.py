@@ -9,6 +9,7 @@ from app.engine.trace import ValidationError
 from app.engine.sizing import size_application, SizingRequest
 from app.engine.bearing import bearing_life, BearingRequest
 from app.engine.method_eval import MethodPlan, evaluate_method
+from app.engine.project import ProjectPlan, evaluate_project
 
 router = APIRouter()
 
@@ -106,6 +107,16 @@ class EvaluateMethodRequest(BaseModel):
 def evaluate_method_route(request: EvaluateMethodRequest):
     """Deterministically evaluates an AI-chosen method from the engineer's values."""
     return evaluate_method(request.plan, request.values).model_dump()
+
+class EvaluateProjectRequest(BaseModel):
+    plan: ProjectPlan
+    values: dict = {}
+
+
+@router.post("/project-evaluate")
+def evaluate_project_route(request: EvaluateProjectRequest, db: Session = Depends(get_db)):
+    """Runs every calculation of a project plan in order; missing information is reported per step."""
+    return evaluate_project(request.plan, request.values, db).model_dump()
 
 @router.post("/bearing-life")
 def bearing_life_check(request: BearingRequest):
