@@ -49,6 +49,48 @@
         inertia:      { "kg·m²": [1], "kg·mm²": [1e-6], "lb·ft²": [0.0421401100938] },
     };
 
+    // Full names, so nobody has to guess what an abbreviation means (several have other meanings)
+    const NAMES = {
+        "m": "metre", "mm": "millimetre", "cm": "centimetre", "km": "kilometre", "µm": "micrometre",
+        "in": "inch", "ft": "foot", "yd": "yard",
+        "m²": "square metre", "mm²": "square millimetre", "cm²": "square centimetre", "in²": "square inch", "ft²": "square foot",
+        "m³": "cubic metre", "L": "litre", "cm³": "cubic centimetre", "mm³": "cubic millimetre", "in³": "cubic inch", "ft³": "cubic foot",
+        "kg": "kilogram", "g": "gram", "t": "metric tonne (1,000 kg)", "lb": "pound (mass)", "short ton": "US short ton (2,000 lb)",
+        "s": "second", "ms": "millisecond", "min": "minute", "h": "hour",
+        "A": "ampere", "mA": "milliampere", "kA": "kiloampere",
+        "K": "kelvin", "°C": "degree Celsius", "°F": "degree Fahrenheit",
+        "mol": "mole", "kmol": "kilomole", "cd": "candela",
+        "rad": "radian", "deg": "degree (angle)", "°": "degree (angle)", "rev": "revolution (full turn)",
+        "sr": "steradian (solid angle)",
+        "Hz": "hertz (cycles per second)", "kHz": "kilohertz",
+        "rpm": "revolutions per minute", "rad/s": "radians per second", "rev/s": "revolutions per second",
+        "m/s": "metres per second", "m/min": "metres per minute", "km/h": "kilometres per hour",
+        "ft/min": "feet per minute", "ft/s": "feet per second", "mm/s": "millimetres per second",
+        "m/s²": "metres per second squared", "g₀": "standard gravity (9.80665 m/s²)", "ft/s²": "feet per second squared",
+        "N": "newton", "kN": "kilonewton", "MN": "meganewton", "kgf": "kilogram-force",
+        "lbf": "pound-force", "kip": "kip (1,000 pound-force)",
+        "N·m": "newton metre", "kN·m": "kilonewton metre", "N·mm": "newton millimetre",
+        "kgf·m": "kilogram-force metre", "lbf·ft": "pound-force foot", "lbf·in": "pound-force inch",
+        "Pa": "pascal", "kPa": "kilopascal", "MPa": "megapascal", "GPa": "gigapascal",
+        "N/mm²": "newton per square millimetre (= megapascal)", "bar": "bar (100 kPa)",
+        "psi": "pound-force per square inch", "ksi": "kilo-pound-force per square inch",
+        "J": "joule", "kJ": "kilojoule", "MJ": "megajoule", "Wh": "watt-hour", "kWh": "kilowatt-hour", "BTU": "British thermal unit",
+        "W": "watt", "kW": "kilowatt", "MW": "megawatt", "hp": "mechanical horsepower (745.7 W)", "PS": "metric horsepower (735.5 W)",
+        "C": "coulomb", "mAh": "milliampere-hour", "Ah": "ampere-hour",
+        "V": "volt", "mV": "millivolt", "kV": "kilovolt",
+        "Ω": "ohm", "kΩ": "kilo-ohm", "MΩ": "mega-ohm",
+        "F": "farad", "µF": "microfarad", "nF": "nanofarad", "pF": "picofarad",
+        "Wb": "weber", "mWb": "milliweber", "T": "tesla", "mT": "millitesla", "G": "gauss",
+        "H": "henry", "mH": "millihenry", "µH": "microhenry", "lm": "lumen",
+        "kg/m³": "kilograms per cubic metre", "g/cm³": "grams per cubic centimetre", "t/m³": "tonnes per cubic metre",
+        "lb/ft³": "pounds per cubic foot",
+        "kg/s": "kilograms per second", "kg/h": "kilograms per hour", "t/h": "metric tonnes per hour",
+        "lb/h": "pounds per hour", "short ton/h": "US short tons per hour",
+        "kg/m": "kilograms per metre", "g/m": "grams per metre", "lb/ft": "pounds per foot",
+        "kg·m²": "kilogram square metre (moment of inertia)", "kg·mm²": "kilogram square millimetre", "lb·ft²": "pound square foot",
+        "kg/m3": "kilograms per cubic metre",
+    };
+
     // Spellings that mean the same unit
     const ALIASES = {
         "Nm": "N·m", "N.m": "N·m", "N*m": "N·m", "kNm": "kN·m", "Nmm": "N·mm",
@@ -61,10 +103,10 @@
 
     // Presets: family → preferred display unit (families not listed keep the calculation's unit)
     const PRESETS = {
-        "as-calculated": { label: "SI (as calculated)", units: {} },
-        "si-eng": { label: "SI engineering (kN, kW, MPa)", units: {
+        "as-calculated": { label: "SI — as calculated (newton, newton metre, millimetre, watt)", units: {} },
+        "si-eng": { label: "SI engineering — kilonewton, kilowatt, megapascal", units: {
             force: "kN", torque: "kN·m", power: "kW", pressure: "MPa", energy: "kJ", mass_flow: "t/h" } },
-        "us": { label: "US customary (lbf, hp, psi, in)", units: {
+        "us": { label: "US customary — pound-force, horsepower, psi, inch", units: {
             length: "in", mass: "lb", force: "lbf", torque: "lbf·ft", power: "hp", pressure: "psi", speed: "ft/min",
             density: "lb/ft³", mass_flow: "short ton/h", linear_mass: "lb/ft", temperature: "°F", inertia: "lb·ft²",
             area: "in²", volume: "ft³", acceleration: "ft/s²", energy: "BTU" } },
@@ -106,11 +148,52 @@
         : Math.abs(x) >= 1e4 ? Math.round(x).toLocaleString() : String(Number(Number(x).toPrecision(4)));
     const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
+    const fullName = u => NAMES[norm(u)] || "";
+    const label = u => fullName(u) ? `${u} — ${fullName(u)}` : u;
+
     function unitSelect(calcUnit, shown, cls = "u-sel") {
         const fam = family(calcUnit);
-        if (!fam || Object.keys(FAMILIES[fam]).length < 2) return `<span class="u-unit">${esc(shown)}</span>`;
-        return `<select class="${cls}" data-family="${fam}" title="Change unit">${
-            Object.keys(FAMILIES[fam]).map(u => `<option value="${esc(u)}" ${u === shown ? "selected" : ""}>${esc(u)}</option>`).join("")}</select>`;
+        if (!fam || Object.keys(FAMILIES[fam]).length < 2)
+            return `<span class="u-unit" title="${esc(fullName(shown))}">${esc(shown)}</span>`;
+        // Every option shows its symbol and full name, e.g. "kN — kilonewton"
+        return `<select class="${cls}" data-family="${fam}" title="${esc(fullName(shown) || "Change unit")} — click to change">${
+            Object.keys(FAMILIES[fam]).map(u => `<option value="${esc(u)}" ${u === shown ? "selected" : ""}>${esc(label(u))}</option>`).join("")}</select>`;
+    }
+
+    /** Factor text for a conversion, e.g. "1 N·m = 0.7376 lbf·ft" (temperatures give the formula instead). */
+    function factorText(from, to) {
+        const f1 = FAMILIES[family(from)]?.[norm(from)], f2 = FAMILIES[family(to)]?.[norm(to)];
+        if (!f1 || !f2) return "";
+        if ((f1[1] || 0) || (f2[1] || 0)) return `${from} → ${to}`;
+        return `1 ${from} = ${fmt(f1[0] / f2[0])} ${to}`;
+    }
+
+    /** "630 mm = 24.8 in" when the engineer's unit differs from the calculation unit, else "". */
+    function inYourUnits(v, calcUnit) {
+        const u = norm(calcUnit), shown = displayUnit(u);
+        if (!family(u) || shown === u) return "";
+        return `${fmt(v)} ${u} = ${fmt(convert(v, u, shown))} ${shown}`;
+    }
+
+    /** "In your units" line for one working step: the inputs it used and its result, with the exact factor. */
+    function stepConversionHtml(inputs, symbol, result, unit) {
+        const parts = (inputs || []).map(([name, v, u]) => {
+            const t = typeof v === "number" ? inYourUnits(v, u) : "";
+            return t ? `${esc(name)}: ${esc(t)}` : "";
+        }).filter(Boolean);
+        if (inYourUnits(result, unit)) {
+            const shown = displayUnit(unit);
+            parts.push(`<strong>${esc(symbol)} = ${esc(fmt(convert(result, unit, shown)))} ${esc(shown)}</strong>
+                <span class="u-factor">(${esc(factorText(norm(unit), shown))})</span>`);
+        }
+        return parts.length ? `<div class="u-conv">In your units — ${parts.join(" · ")}</div>` : "";
+    }
+
+    /** A key of full unit names for the units that appear in some working. */
+    function legendHtml(units) {
+        const seen = [...new Set(units.map(norm).filter(u => fullName(u)))];
+        if (!seen.length) return "";
+        return `<div class="u-legend"><strong>Units key:</strong> ${seen.map(u => `<span><b>${esc(u)}</b> = ${esc(fullName(u))}</span>`).join(" · ")}</div>`;
     }
 
     /** A result value with its own unit dropdown. The calculated value and unit are kept in data attributes. */
@@ -149,7 +232,8 @@
     });
 
     window.Units = {
-        FAMILIES, family, norm, convert, toBase, fromBase, displayUnit, valueHtml, unitSelect, refresh,
+        FAMILIES, NAMES, family, norm, convert, toBase, fromBase, displayUnit, valueHtml, unitSelect, refresh,
+        fullName, label, factorText, inYourUnits, legendHtml, stepConversionHtml,
         setFamily, setPreset, onChange: fn => listeners.push(fn), fmt,
         get preset() { return preset; },
     };

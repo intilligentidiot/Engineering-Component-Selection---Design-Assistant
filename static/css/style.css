@@ -547,3 +547,27 @@ select.u-sel option { background: var(--dark-800); color: var(--silver-100); }
 .u-note { font-weight: 400; color: var(--silver-600); font-size: 0.75rem; }
 .sz-req-val select.u-sel { font-size: 0.5em; vertical-align: middle; }
 @media (max-width: 720px) { .units-pick { margin: 0.4rem 0 0; } }
+
+/* Working shown in the engineer's units, and the units key */
+.u-conv { font-size: 0.78rem; color: var(--blue-400); padding-left: 1.9rem; margin-top: 0.25rem; line-height: 1.5; }
+.u-conv strong { color: var(--silver-100); }
+.u-factor { color: var(--silver-600); }
+.u-legend { font-size: 0.74rem; color: var(--silver-400); margin: 0.75rem 0 0.25rem; line-height: 1.7; }
+.u-legend strong { color: var(--silver-200); margin-right: 0.25rem; }
+.u-legend b { color: var(--silver-100); }
+select.u-sel { max-width: 15rem; }
+.unit-badge.u-badge select.u-sel { max-width: 9.5rem; }
+
+/* Project inputs: room for the number and a readable unit name */
+.pj-row { grid-template-columns: 1fr 330px; }
+.pj-input input[type="number"] { min-width: 6.5rem; flex: 1 1 6.5rem; }
+.pj-input .unit-badge.u-badge { flex: 0 1 auto; max-width: 11rem; overflow: hidden; }
+.pj-input .unit-badge.u-badge select.u-sel { max-width: 11rem; text-overflow: ellipsis; }
+@media (max-width: 720px) { .pj-row { grid-template-columns: 1fr; } }
+.units-pick select { max-width: 19rem; text-overflow: ellipsis; }
+@media (max-width: 720px) {
+    .units-pick { width: 100%; }
+    .units-pick select { flex: 1; min-width: 0; max-width: none; width: 100%; }
+    .pj-res select.u-sel, .sz-req-val select.u-sel { max-width: 8.5rem; }
+    .u-val { white-space: normal; }
+}

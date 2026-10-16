@@ -204,13 +204,25 @@
             <div class="sz-step-head"><span class="sz-step-n">${i + 1}</span> ${esc(s.label || s.name)}</div>
             <div class="sz-formula">${esc(s.formula)}</div>
             <div class="sz-subst">${esc(s.substitution)}</div>
+            ${Units.stepConversionHtml([], s.symbol || s.key || "", s.result, s.unit)}
             ${s.note ? `<div class="sz-step-note">${esc(s.note)}</div>` : ""}
-        </li>`).join("")}</ol>`;
+        </li>`).join("")}</ol>${Units.legendHtml(steps.map(s => s.unit))}`;
     const typicalUsed = () => Object.entries(typical).filter(([k]) => filled(k))
         .map(([k, note]) => `${(defsFor()[k] || { label: k }).label}: ${values[k]} — ${note}`);
     const list = (items, cls, heading) => items.length ? `<div class="sz-note ${cls}"><strong>${esc(heading)}</strong><ul>${items.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>` : "";
 
-    function renderBearing(r) {
+    // Redraw the last result when the units change, so "in your units" lines follow
+    let lastShown = null;
+    Units.onChange(() => {
+        if (!lastShown || panel.hidden) return;
+        const open = body.querySelector("details.sz-details")?.open;
+        lastShown[0](lastShown[1], true);
+        const d = body.querySelector("details.sz-details");
+        if (d && open) d.open = true;
+    });
+
+    function renderBearing(r, quiet = false) {
+        lastShown = [renderBearing, r];
         const badge = { MEETS: "MEETS", DOES_NOT_MEET: "DOES_NOT_MEET" }[r.status];
         title.innerHTML = r.min_dynamic_rating_kn != null ? "Minimum bearing rating needed"
             : `Bearing life${badge ? ` &nbsp;<span class="data-status ${badge}">${badge.replace(/_/g, " ")}</span>` : ""}`;
@@ -224,10 +236,11 @@
             ${list(r.notes || [], "info", "Notes")}
             <details class="sz-details"><summary>Show the full calculation (${r.steps.length} steps)</summary>${stepsHtml(r.steps)}</details>`;
         panel.hidden = false;
-        panel.scrollIntoView({ behavior: "smooth", block: "start" });
+        if (!quiet) panel.scrollIntoView({ behavior: "smooth", block: "start" });
     }
 
-    function renderMethod(r) {
+    function renderMethod(r, quiet = false) {
+        lastShown = [renderMethod, r];
         title.innerHTML = `${esc(plan.title)} <span class="data-status DISCOVERED">AI METHOD — CHECK</span>`;
         sub.textContent = plan.standard ? `Method: ${plan.standard} (chosen by AI). Numbers calculated by the tool from your inputs.`
                                         : "Method chosen by AI. Numbers calculated by the tool from your inputs.";
@@ -240,7 +253,7 @@
             ${list(plan.limitations || [], "warn", "Limitations of this method")}
             <details class="sz-details" open><summary>Show the full calculation (${r.steps.length} steps)</summary>${stepsHtml(r.steps)}</details>`;
         panel.hidden = false;
-        panel.scrollIntoView({ behavior: "smooth", block: "start" });
+        if (!quiet) panel.scrollIntoView({ behavior: "smooth", block: "start" });
     }
 
     // Buttons elsewhere (e.g. "Open Advanced: Torque & RPM") switch tabs

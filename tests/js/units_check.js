@@ -23,6 +23,17 @@ const checks = [
   ["N -> rpm (different family: unchanged)", c(5, "N", "rpm"), 5],
 ];
 let bad = 0;
+// Every unit offered in a dropdown must have a full name
+for (const [fam, units] of Object.entries(U.FAMILIES)) {
+  for (const u of Object.keys(units)) {
+    if (!U.fullName(u)) { bad++; console.log("BAD missing full name:", fam, u); }
+  }
+}
+// Factor text shown under the working
+const ft = U.factorText("N·m", "lbf·ft");
+if (ft !== "1 N·m = 0.7376 lbf·ft") { bad++; console.log("BAD factor text:", ft); } else console.log("OK  factor text", ft);
+const tt = U.factorText("°C", "°F");
+if (tt !== "°C → °F") { bad++; console.log("BAD temperature factor text:", tt); } else console.log("OK  temperature factor text", tt);
 for (const [name, got, want] of checks) {
   const ok = Math.abs(got - want) <= Math.abs(want) * 2e-4 + 1e-9;
   if (!ok) bad++;

@@ -15,7 +15,8 @@
     const fmt = x => (x === null || x === undefined) ? "—"
         : Math.abs(x) >= 1e4 ? Math.round(x).toLocaleString() : String(Number(Number(x).toPrecision(4)));
 
-    let plan = null, values = {}, quotes = {}, typical = {}, estimated = {};   // estimated: symbol -> how it was estimated
+    let plan = null, values = {}, quotes = {}, typical = {}, estimated = {};
+    let lastResult = null, known = {};   // known: symbol -> { value, unit } for every input and result   // estimated: symbol -> how it was estimated
 
     function hide() { area.hidden = true; plan = null; values = {}; quotes = {}; typical = {}; estimated = {}; }
 
@@ -73,7 +74,11 @@
         if (v === undefined || v === null || v === "") return "";
         return String(Number(Units.convert(Number(v), i.unit, Units.displayUnit(i.unit)).toPrecision(6)));
     }
-    Units.onChange(() => { if (plan && !area.hidden) renderInfo(); });
+    Units.onChange(() => {
+        if (!plan || area.hidden) return;
+        renderInfo();
+        if (lastResult) renderCalcs(lastResult);
+    });
 
     info.addEventListener("input", e => {
         const k = e.target.dataset.pj;
@@ -159,7 +164,7 @@
         renderAsked(r);
         const done = r.calculations.filter(c => c.status === "DONE").length;
         progress.textContent = `${done} of ${r.calculations.length} calculations done`;
-        calcs.innerHTML = plan.calculations.map((c, idx) => card(c, r.calculations[idx], idx + 1)).join("");
+        renderCalcs(r);
     }
 
     // "You asked for": each result the user listed, with its answer or what it is waiting for
@@ -199,6 +204,41 @@
     const badge = s => ({ DONE: `<span class="data-status MEETS">DONE</span>`, WAITING: `<span class="data-status DISCOVERED">WAITING</span>`,
                           ERROR: `<span class="data-status DOES_NOT_MEET">CHECK INPUTS</span>` }[s] || "");
 
+    function renderCalcs(r) {
+        lastResult = r;
+        known = {};
+        plan.inputs.forEach(i => {
+            if (values[i.symbol] !== undefined && values[i.symbol] !== "") known[i.symbol] = { value: Number(values[i.symbol]), unit: i.unit };
+        });
+        r.calculations.forEach(cr => (cr.steps || []).forEach(s => { known[s.symbol] = { value: s.result, unit: s.unit }; }));
+        // keep open "Show working" sections open when redrawing
+        const open = [...calcs.querySelectorAll("details.sz-details")].map(d => d.open);
+        calcs.innerHTML = plan.calculations.map((c, idx) => card(c, r.calculations[idx], idx + 1)).join("");
+        calcs.querySelectorAll("details.sz-details").forEach((d, i) => { if (open[i]) d.open = true; });
+    }
+
+    // Under each step: the values it used and its result in the engineer's units, with the exact factor
+    const NOT_SYMBOLS = new Set(["sqrt", "exp", "log", "log10", "ln", "sin", "cos", "tan", "asin", "acos", "atan", "atan2",
+                                 "radians", "degrees", "abs", "min", "max", "ceil", "floor", "pow", "pi", "g"]);
+    function inYourUnitsLine(s) {
+        const used = [...new Set((s.formula.split("=").slice(1).join("=").match(/[A-Za-z_][A-Za-z0-9_]*/g) || [])
+            .filter(x => !NOT_SYMBOLS.has(x) && known[x]))];
+        const parts = used.map(x => { const t = Units.inYourUnits(known[x].value, known[x].unit); return t ? `${esc(x)}: ${esc(t)}` : ""; })
+            .filter(Boolean);
+        const res = Units.inYourUnits(s.result, s.unit);
+        if (res) parts.push(`<strong>${esc(s.symbol)} = ${esc(Units.fmt(Units.convert(s.result, s.unit, Units.displayUnit(s.unit))))} ${esc(Units.displayUnit(s.unit))}</strong>
+            <span class="u-factor">(${esc(Units.factorText(s.unit, Units.displayUnit(s.unit)))})</span>`);
+        return parts.length ? `<div class="u-conv">In your units — ${parts.join(" · ")}</div>` : "";
+    }
+    function stepUnits(steps) {
+        const out = [];
+        steps.forEach(s => {
+            out.push(s.unit);
+            ((s.formula.split("=").slice(1).join("=").match(/[A-Za-z_][A-Za-z0-9_]*/g)) || []).forEach(x => { if (known[x]) out.push(known[x].unit); });
+        });
+        return out.filter(Boolean);
+    }
+
     function card(c, r, n) {
         let bodyHtml = "";
         if (r.status === "WAITING") {
@@ -207,10 +247,12 @@
             bodyHtml = `<div class="sz-note danger"><ul>${r.errors.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>`;
         } else if (c.kind === "formula") {
             bodyHtml = `<div class="pj-results">${r.steps.map(s => `<div class="pj-res"><span>${esc(s.name)}</span><strong>${Units.valueHtml(s.result, s.unit)}</strong></div>`).join("")}</div>
-                <details class="sz-details"><summary>Show working <span class="u-note">(in the units used for the calculation)</span></summary><ol class="sz-steps">${r.steps.map((s, i) => `
+                <details class="sz-details"><summary>Show working <span class="u-note">(the formula uses the calculation's units so the arithmetic can be checked; your units are shown under each step)</span></summary><ol class="sz-steps">${r.steps.map((s, i) => `
                     <li class="sz-stepline"><div class="sz-step-head"><span class="sz-step-n">${i + 1}</span> ${esc(s.name)}</div>
                     <div class="sz-formula">${esc(s.formula)}</div><div class="sz-subst">${esc(s.substitution)}</div>
-                    ${s.note ? `<div class="sz-step-note">${esc(s.note)}</div>` : ""}</li>`).join("")}</ol></details>`;
+                    ${inYourUnitsLine(s)}
+                    ${s.note ? `<div class="sz-step-note">${esc(s.note)}</div>` : ""}</li>`).join("")}</ol>
+                    ${Units.legendHtml(stepUnits(r.steps))}</details>`;
         } else if (c.kind === "bearing_life") {
             const b = r.bearing;
             const st = { MEETS: badge("DONE").replace("DONE", "MEETS"), DOES_NOT_MEET: `<span class="data-status DOES_NOT_MEET">DOES NOT MEET</span>` }[b.status] || "";

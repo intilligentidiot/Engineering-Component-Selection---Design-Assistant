@@ -526,7 +526,17 @@
         proofPanel.hidden = false;
     }
 
-    function renderProof(sized, body) {
+    let lastProof = null;
+    Units.onChange(() => {   // redraw the proof so "in your units" lines follow the chosen units
+        if (!lastProof || proofPanel.hidden) return;
+        const open = proofBody.querySelector("details.sz-details")?.open;
+        renderProof(...lastProof, true);
+        const d = proofBody.querySelector("details.sz-details");
+        if (d && open) d.open = true;
+    });
+
+    function renderProof(sized, body, quiet = false) {
+        lastProof = [sized, body];
         const r = sized.requirement;
         const appName = appSelect.options[appSelect.selectedIndex].text.split(" — ")[0];
         proofTitle.textContent = "What your machine needs";
@@ -547,6 +557,7 @@
                 <div class="sz-step-head"><span class="sz-step-n">${i + 1}</span> ${esc(s.label)}</div>
                 <div class="sz-formula">${esc(s.formula)}</div>
                 <div class="sz-subst">${esc(s.substitution)}</div>
+                ${Units.stepConversionHtml(Object.entries(s.inputs || {}).map(([k, inp]) => [k, inp.value, inp.unit]), s.key, s.result, s.unit)}
                 ${defaults.length ? `<div class="sz-step-note default">Uses default: ${defaults.map(([k, inp]) => `${esc(k)} = ${esc(inp.value)} ${esc(inp.unit)}`).join(", ")}</div>` : ""}
                 ${s.note ? `<div class="sz-step-note">${esc(s.note)}</div>` : ""}
             </li>`;
@@ -576,10 +587,11 @@
                 ${list(sized.material_notes, "info", "Material")}
                 ${points}
                 <ol class="sz-steps">${steps}</ol>
+                ${Units.legendHtml(sized.steps.flatMap(s => [s.unit, ...Object.values(s.inputs || {}).map(i => i.unit)]))}
                 <p class="field-hint" style="margin-top:1rem">Engineering defaults version: ${esc(sized.defaults_version)} (awaiting engineering sign-off — see docs/ENGINEERING_DEFAULTS_TO_REVIEW.md).</p>
             </details>`;
         proofPanel.hidden = false;
-        proofPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+        if (!quiet) proofPanel.scrollIntoView({ behavior: "smooth", block: "start" });
     }
 
     render();
