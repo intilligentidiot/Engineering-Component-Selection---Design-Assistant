@@ -214,8 +214,14 @@
     }
 
     const listeners = [];
-    function setFamily(fam, unit) { famPref[fam] = unit; save(); refresh(); }
-    function setPreset(p) { preset = PRESETS[p] ? p : "as-calculated"; famPref = {}; save(); refresh(); }
+    // A choice on one value only counts as "custom" if it differs from what the preset shows
+    const customised = () => Object.entries(famPref).some(([fam, u]) => {
+        const presetUnit = PRESETS[preset].units[fam];
+        return presetUnit ? u !== presetUnit : true;
+    });
+
+    function setFamily(fam, unit) { famPref[fam] = unit; save(); refresh(); updateHeader(); }
+    function setPreset(p) { preset = PRESETS[p] ? p : "as-calculated"; famPref = {}; save(); refresh(); updateHeader(); }
 
     // A unit dropdown on any result value sets the unit for its whole family
     document.addEventListener("change", e => {
@@ -223,12 +229,21 @@
         if (sel) setFamily(sel.dataset.family, sel.value);
     });
 
-    // Header preset selector
+    // Header preset selector — shows "Custom" once single values have been changed
+    function updateHeader() {
+        const head = document.getElementById("units-preset");
+        if (!head) return;
+        const custom = customised();
+        head.innerHTML = Object.entries(PRESETS).map(([k, p]) =>
+                `<option value="${k}" ${k === preset && !custom ? "selected" : ""}>${esc(p.label)}</option>`).join("")
+            + (custom ? `<option value="custom" selected>Custom — ${esc(PRESETS[preset].label.split(" — ")[0])} with your own changes</option>` : "");
+        head.title = custom ? "You changed some units on individual values. Pick a preset to reset them." : "Units used to show results";
+    }
     document.addEventListener("DOMContentLoaded", () => {
         const head = document.getElementById("units-preset");
         if (!head) return;
-        head.innerHTML = Object.entries(PRESETS).map(([k, p]) => `<option value="${k}" ${k === preset ? "selected" : ""}>${esc(p.label)}</option>`).join("");
-        head.addEventListener("change", () => setPreset(head.value));
+        updateHeader();
+        head.addEventListener("change", () => { if (head.value !== "custom") setPreset(head.value); });
     });
 
     window.Units = {
@@ -236,5 +251,6 @@
         fullName, label, factorText, inYourUnits, legendHtml, stepConversionHtml,
         setFamily, setPreset, onChange: fn => listeners.push(fn), fmt,
         get preset() { return preset; },
+        get custom() { return customised(); },
     };
 })();
