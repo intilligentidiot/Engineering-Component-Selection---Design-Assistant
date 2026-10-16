@@ -275,7 +275,8 @@ PROJECT_INSTRUCTION = (
     "7) If the user lists specific results they need, calculate every one of them as a step, using their wording "
     "in the step name. "
     "8) Use the recognised method for the machine type (e.g. ISO 5048 / DIN 22101 or CEMA for bulk belt conveyors), "
-    "never a simplified method meant for a different kind of machine."
+    "never a simplified method meant for a different kind of machine. "
+    "9) Put the symbols of the main results an engineer would look for first into key_symbols."
 )
 
 _SHRED_VALUES = [

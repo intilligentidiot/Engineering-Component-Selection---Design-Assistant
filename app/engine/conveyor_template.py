@@ -103,6 +103,7 @@ def bulk_conveyor_template(machine: str = "Belt conveyor (bulk material)") -> Pr
                         links=[Link(param="radial_load_n", symbol="Fr_b"), Link(param="speed_rpm", symbol="n"),
                                Link(param="required_life_h", symbol="life_req"), Link(param="dynamic_rating_kn", symbol="C_b")]),
         ],
+        key_symbols=["R", "T1", "T2", "P_A", "P_M", "T", "n", "M", "sigma_allow", "d_min"],
         limitations=[
             "ISO 5048 simplified method with coefficient C — for long, inclined or multi-drive conveyors use the full "
             "DIN 22101 / CEMA calculation.",

@@ -97,7 +97,15 @@
     // "You asked for": each result the user listed, with its answer or what it is waiting for
     function renderAsked(r) {
         const box = $("pj-asked");
-        const items = plan.requested || [];
+        // Nothing listed by the user → show the main result of every calculation as "Key results"
+        const listed = (plan.requested || []).length > 0;
+        const stepName = {};
+        plan.calculations.forEach(c => (c.steps || []).forEach(s => { stepName[s.symbol] = s.name; }));
+        const items = listed ? plan.requested
+            : (plan.key_symbols || []).length
+                ? plan.key_symbols.filter(sym => stepName[sym]).map(sym => ({ text: stepName[sym], symbol: sym }))
+                : plan.calculations.filter(c => c.kind === "formula" && c.steps.length)
+                      .map(c => ({ text: c.steps[c.steps.length - 1].name, symbol: c.steps[c.steps.length - 1].symbol }));
         if (!items.length) { box.innerHTML = ""; return; }
         const results = {}, from = {};
         plan.calculations.forEach((c, idx) => {
@@ -117,7 +125,7 @@
             return `<div class="pj-res"><span>${esc(q.text)}</span><strong class="pj-none">${esc(why)}</strong></div>`;
         });
         const done = items.filter(q => q.symbol && results[q.symbol]).length;
-        box.innerHTML = `<div class="pj-asked"><div class="pj-asked-head">You asked for <span class="pj-progress">${done} of ${items.length} answered</span></div>${rows.join("")}</div>`;
+        box.innerHTML = `<div class="pj-asked"><div class="pj-asked-head">${listed ? "You asked for" : "Key results"} <span class="pj-progress">${done} of ${items.length} ${listed ? "answered" : "calculated"}</span></div>${rows.join("")}</div>`;
     }
 
     const badge = s => ({ DONE: `<span class="data-status MEETS">DONE</span>`, WAITING: `<span class="data-status DISCOVERED">WAITING</span>`,

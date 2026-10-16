@@ -85,6 +85,8 @@ class ProjectPlan(BaseModel):
     limitations: List[str] = Field(default_factory=list)
     requested: List[RequestedItem] = Field(default_factory=list,
                                            description="Each specific result the user listed, mapped to the step that answers it.")
+    key_symbols: List[str] = Field(default_factory=list,
+                                   description="Symbols of the main results to show at the top when the user listed none.")
 
 
 class CalcResult(BaseModel):
@@ -339,6 +341,7 @@ def shredder_template(machine: str = "Shredding machine") -> ProjectPlan:
                         links=[Link(param="radial_load_n", symbol="Fr_b"), Link(param="speed_rpm", symbol="n"),
                                Link(param="required_life_h", symbol="life_req"), Link(param="dynamic_rating_kn", symbol="C")]),
         ],
+        key_symbols=["F", "T_sh", "T_tot", "P", "P_d", "d"],
         limitations=[
             "Simplified cutting model: real shredding forces depend on blade geometry, material toughness and feeding — "
             "confirm with test data or the shredder manufacturer.",
