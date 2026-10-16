@@ -304,7 +304,33 @@ _CONVEYOR_VALUES = [
     ("H", r"lift(?:\s*height)?\s*(?:of|is|:)?\s*(\d+(?:\.\d+)?)\s*m\b"),
     ("theta", r"wrap(?:\s*angle)?\s*(?:of|is|:)?\s*(\d+(?:\.\d+)?)\s*(?:°|deg)"),
     ("V", r"(\d+(?:\.\d+)?)\s*(?:v|volts?|vac|vdc)\b"),
+    # Belt, idlers and resistances
+    ("m_B", r"belt\s*(?:mass|weight)\s*(?:of|is|=|:)?\s*(\d+(?:\.\d+)?)\s*kg/m"),
+    ("m_B", r"(\d+(?:\.\d+)?)\s*kg/m\s*belt"),
+    ("m_R", r"idlers?\s*(?:rotating\s*)?(?:mass|weight)\s*(?:of|is|=|:)?\s*(\d+(?:\.\d+)?)\s*kg/m"),
+    ("m_R", r"rotating\s*(?:idler\s*)?(?:mass|weight)\s*(?:of|is|=|:)?\s*(\d+(?:\.\d+)?)\s*kg/m"),
+    ("F_S2", r"(?:special|additional)\s*resistances?\s*(?:of|is|=|:)?\s*(\d+(?:\.\d+)?)\s*N\b"),
+    # Coefficients (pulley friction before the general friction pattern)
+    ("mu", r"(?:pulley|lagging|belt[- ]to[- ]pulley|drive)\s*friction(?:\s*coefficient)?\s*(?:of|is|=|:)?\s*(\d+(?:\.\d+)?)"),
+    ("mu", r"(?:\bmu|μ)\s*=\s*(\d+(?:\.\d+)?)"),
+    ("f", r"(?:artificial|idler)\s*friction(?:\s*(?:coefficient|factor))?\s*(?:f\s*)?(?:of|is|=|:)?\s*(\d+(?:\.\d+)?)"),
+    ("f", r"\bf\s*=\s*(\d+(?:\.\d+)?)"),
+    ("C", r"(?:length\s*)?coefficient\s*C\s*(?:of|is|=|:)?\s*(\d+(?:\.\d+)?)"),
+    ("C", r"\bC\s*=\s*(\d+(?:\.\d+)?)(?!\s*kN)"),
+    ("eta", r"(?:drive|gearbox|gear)?\s*efficiency\s*(?:of|is|=|:)?\s*(\d+(?:\.\d+)?)\s*%?"),
+    # Shaft, drive and bearings
+    ("a", r"(?:bearing[- ]to[- ]hub|bearing centre to hub|bearing center to hub|hub[- ]to[- ]bearing)(?:\s*distance)?\s*(?:of|is|=|:)?\s*(\d+(?:\.\d+)?)\s*mm"),
+    ("Sy", r"yield\s*(?:strength|stress)?\s*(?:of|is|=|:)?\s*(\d+(?:\.\d+)?)\s*MPa"),
+    ("Sy", r"(\d+(?:\.\d+)?)\s*MPa\s*yield"),
+    ("n_s", r"safety\s*factor\s*(?:of|is|=|:)?\s*(\d+(?:\.\d+)?)"),
+    ("SF", r"service\s*factor\s*(?:of|is|=|:)?\s*(\d+(?:\.\d+)?)"),
+    ("life_req", r"(?:bearing\s*)?life\s*(?:of|is|=|:)?\s*(\d+(?:\.\d+)?)\s*(?:h|hrs?|hours?)\b"),
+    ("life_req", r"(\d+(?:\.\d+)?)\s*(?:h|hrs?|hours?)\s*(?:of\s*)?(?:bearing\s*)?life"),
+    ("C_b", r"(?:bearing\s*)?(?:dynamic\s*)?(?:load\s*)?rating\s*(?:C\s*)?(?:of|is|=|:)?\s*(\d+(?:\.\d+)?)\s*kN"),
 ]
+
+# Values written as a percentage are converted to a fraction
+_PERCENT_SYMBOLS = {"eta"}
 
 
 def _fill(plan: ProjectPlan, text: str, patterns) -> ProjectPlan:
@@ -315,7 +341,10 @@ def _fill(plan: ProjectPlan, text: str, patterns) -> ProjectPlan:
             continue
         mm = re.search(pat, text, re.IGNORECASE)
         if mm:
-            inp.value, inp.quote = float(mm.group(1)), mm.group(0)
+            val = float(mm.group(1))
+            if sym in _PERCENT_SYMBOLS and (mm.group(0).rstrip().endswith("%") or val > 1.5):
+                val /= 100
+            inp.value, inp.quote = val, mm.group(0).strip()
     return plan
 
 
@@ -326,6 +355,10 @@ def _mock_project(text: str) -> ProjectPlan:
         flat = re.search(r"\bhorizontal\b|\bflat\b|\blevel\b", text, re.IGNORECASE)
         if flat:
             H.value, H.quote = 0.0, flat.group(0)
+        none = re.search(r"\bno (?:special|additional) resistances?\b|\bno skirt ?boards?\b", text, re.IGNORECASE)
+        if none:
+            S2 = next(i for i in plan.inputs if i.symbol == "F_S2")
+            S2.value, S2.quote = 0.0, none.group(0)
         return _fill(plan, text, _CONVEYOR_VALUES)
     if not _PROJECT_RE.search(text):
         raise ProviderError("AI_NOT_CONFIGURED", "AI is not switched on for this tool.")

@@ -164,3 +164,32 @@ def test_small_parts_conveyor_still_uses_motor_sizing():
 def test_material_name_not_taken_from_unrelated_words():
     r = MockSizingParser().parse("conveyor, shaft material\n\ni need this value")
     assert not any(v.path == "material.name" for v in r.values)
+
+
+FULL_ENGINEER_QUERY = """I'm designing a belt conveyor for iron ore, capacity 1000 t/h, belt speed 2.5 m/s, belt width 1200 mm, centre-to-centre distance 150 m, horizontal.
+Drive pulley diameter 630 mm, wrap angle 180°, pulley friction 0.25 (rubber lagging, wet conditions).
+Belt mass 25 kg/m, idler rotating mass 20 kg/m, no special resistances, length coefficient C = 1.6.
+Pulley shaft: yield strength 350 MPa, safety factor 2.5, bearing-to-hub distance 300 mm.
+Service factor 1.25, 400 V supply, bearing life 40000 hours.
+
+Total equivalent belt tension
+Required drive power
+Pulley shaft torque
+Shaft bending moment
+Allowable bending stress of the shaft material
+
+i need this value or information"""
+
+
+def test_full_query_with_two_items_left_out_is_completed_by_suggestions():
+    p = ask(FULL_ENGINEER_QUERY).project
+    assert [i.symbol for i in p.inputs if i.value is None and i.typical_value is not None] == ["f", "eta"]
+    assert [i.symbol for i in p.inputs if i.value is None and i.typical_value is None and not i.optional] == []
+    vals = {i.symbol: (i.value if i.value is not None else i.typical_value) for i in p.inputs}
+    got = _results(evaluate_project(p, vals))
+    answers = {q.text: got[q.symbol] for q in p.requested}
+    assert answers["Total equivalent belt tension"] == pytest.approx(22814, abs=1)
+    assert answers["Required drive power"] == pytest.approx(21.31, abs=0.01)
+    assert answers["Pulley shaft torque"] == pytest.approx(2685.5, abs=0.5)
+    assert answers["Shaft bending moment"] == pytest.approx(3422.1, abs=0.5)
+    assert answers["Allowable bending stress of the shaft material"] == pytest.approx(140)
