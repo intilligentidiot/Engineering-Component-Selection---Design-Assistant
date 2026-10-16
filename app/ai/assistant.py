@@ -24,7 +24,8 @@ from pydantic import BaseModel, Field
 
 from app.ai.sizing_parser import get_sizing_parser, SizingParseResult, ProviderError, _norm, _MACHINE_NAMES
 from app.engine.method_eval import MethodPlan, validate_plan
-from app.engine.project import ProjectPlan, validate_project, shredder_template
+from app.engine.project import ProjectPlan, validate_project, shredder_template, map_requested
+from app.engine.conveyor_template import bulk_conveyor_template
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +86,8 @@ ROUTER_INSTRUCTION = (
     "Decide what kind of engineering calculation the user is asking for. "
     "project: the user describes a whole machine or project they are designing or modifying (e.g. 'I am building a "
     "shredding machine', 'new project: a bottle capper') and needs to know what to calculate and what information "
-    "is needed — several calculations for several parts. "
+    "is needed — several calculations for several parts; also when the user lists several specific results they "
+    "need (e.g. belt tension, drive power, shaft torque, bending moment), and for bulk-material belt conveyors. "
     "motor_sizing: choosing or sizing a motor / gearbox / drive for a machine that moves something "
     "(conveyor, lift, turntable, linear axis, winder, or any machine with such a motion). "
     "bearing_life: rolling bearing life, load rating or bearing selection (ISO 281, L10). "
@@ -98,11 +100,24 @@ _MOTOR_RE = re.compile(r"\b(?:motors?|gear ?box(?:es)?|gear ?motors?)\b", re.IGN
 
 
 _PROJECT_RE = re.compile(r"\bshred(?:der|ding|s)?\b", re.IGNORECASE)
+# Bulk-material belt conveyors need the ISO 5048 / DIN 22101 method, not the unit-load conveyor model
+_BULK_RE = re.compile(r"\b(?:ore|coal|sand|gravel|grain|aggregates?|bulk|clinker|limestone|cement|fertili[sz]er|"
+                      r"idlers?|belt width)\b|t/h|\btph\b|tonn?es? per hour|tons? per hour|"
+                      r"cent(?:er|re)[- ]to[- ]cent(?:er|re)", re.IGNORECASE)
+_CONVEYOR_RE = re.compile(r"\bconveyors?\b|\bbelt\b", re.IGNORECASE)
+# The user lists the results they want ("I need these values: …") → a project plan, not a single sizing
+_ASKS_RE = re.compile(r"\bi need (?:this|these|the following|the)\b|\bcalculate the following\b|"
+                      r"\bneed (?:these|this|the following) (?:values?|information|results?)\b", re.IGNORECASE)
 
 
 def _mock_route(text: str) -> TopicRouting:
     if _PROJECT_RE.search(text):
         return TopicRouting(topic="project", reason="You described a shredding machine, so the full calculation plan is shown.")
+    if _CONVEYOR_RE.search(text) and _BULK_RE.search(text):
+        return TopicRouting(topic="project", reason="You described a bulk-material belt conveyor, so the ISO 5048 "
+                                                    "conveyor calculation plan is shown.")
+    if _ASKS_RE.search(text):
+        return TopicRouting(topic="project", reason="You listed several results you need, so a calculation plan is shown.")
     machine = any(re.search(p, text, re.IGNORECASE) for _, p in _MACHINE_NAMES)
     if _BEARING_RE.search(text) and not machine:
         return TopicRouting(topic="bearing_life", reason="Your question is about a bearing's load or life.")
@@ -256,7 +271,11 @@ PROJECT_INSTRUCTION = (
     "4) typical_value only for material or catalogue properties, with typical_note giving the source and range; "
     "never for the user's own dimensions, loads, speeds or operating conditions. "
     "5) Name standards where they apply and list limitations honestly. "
-    "6) Keep it practical: the calculations a design engineer must show for this machine, typically 5 to 10."
+    "6) Keep it practical: the calculations a design engineer must show for this machine, typically 5 to 10. "
+    "7) If the user lists specific results they need, calculate every one of them as a step, using their wording "
+    "in the step name. "
+    "8) Use the recognised method for the machine type (e.g. ISO 5048 / DIN 22101 or CEMA for bulk belt conveyors), "
+    "never a simplified method meant for a different kind of machine."
 )
 
 _SHRED_VALUES = [
@@ -272,7 +291,42 @@ _SHRED_VALUES = [
 ]
 
 
+_CONVEYOR_VALUES = [
+    ("v", r"(\d+(?:\.\d+)?)\s*m/s\b"),
+    ("D", r"pulley\s*(?:diameter|dia\.?)?\s*(?:of|is|:)?\s*(\d+(?:\.\d+)?)\s*mm"),
+    ("D", r"(\d+(?:\.\d+)?)\s*mm\s*(?:diameter\s+)?(?:drive\s+)?pulley"),
+    ("L", r"cent(?:er|re)[- ]to[- ]cent(?:er|re)(?:\s+distance)?\s*(?:of|is|:)?\s*(\d+(?:\.\d+)?)\s*(?:m|meters?|metres?)\b"),
+    ("L", r"(?:conveyor\s+)?length\s*(?:of|is|:)?\s*(\d+(?:\.\d+)?)\s*(?:m|meters?|metres?)\b"),
+    ("L", r"(\d+(?:\.\d+)?)\s*(?:m|meters?|metres?)\s*long\b"),
+    ("B", r"belt\s*width\s*(?:of|is|:)?\s*(\d+(?:\.\d+)?)\s*mm"),
+    ("B", r"(\d+(?:\.\d+)?)\s*mm\s*(?:wide\s+)?belt\b"),
+    ("Q", r"(\d+(?:\.\d+)?)\s*(?:t/h|tph|tonn?es? per hour|tons? per hour)"),
+    ("H", r"lift(?:\s*height)?\s*(?:of|is|:)?\s*(\d+(?:\.\d+)?)\s*m\b"),
+    ("theta", r"wrap(?:\s*angle)?\s*(?:of|is|:)?\s*(\d+(?:\.\d+)?)\s*(?:°|deg)"),
+    ("V", r"(\d+(?:\.\d+)?)\s*(?:v|volts?|vac|vdc)\b"),
+]
+
+
+def _fill(plan: ProjectPlan, text: str, patterns) -> ProjectPlan:
+    by_symbol = {i.symbol: i for i in plan.inputs}
+    for sym, pat in patterns:
+        inp = by_symbol[sym]
+        if inp.value is not None:
+            continue
+        mm = re.search(pat, text, re.IGNORECASE)
+        if mm:
+            inp.value, inp.quote = float(mm.group(1)), mm.group(0)
+    return plan
+
+
 def _mock_project(text: str) -> ProjectPlan:
+    if _CONVEYOR_RE.search(text) and _BULK_RE.search(text) and not _PROJECT_RE.search(text):
+        plan = bulk_conveyor_template()
+        H = next(i for i in plan.inputs if i.symbol == "H")
+        flat = re.search(r"\bhorizontal\b|\bflat\b|\blevel\b", text, re.IGNORECASE)
+        if flat:
+            H.value, H.quote = 0.0, flat.group(0)
+        return _fill(plan, text, _CONVEYOR_VALUES)
     if not _PROJECT_RE.search(text):
         raise ProviderError("AI_NOT_CONFIGURED", "AI is not switched on for this tool.")
     m = _PROJECT_RE.search(text)
@@ -294,7 +348,32 @@ def _mock_project(text: str) -> ProjectPlan:
     return plan
 
 
+def requested_items(text: str) -> List[str]:
+    """Results the user listed, e.g. one per line ("Pulley shaft torque") or after "I need:"."""
+    items: List[str] = []
+    for line in re.split(r"[\r\n]+", text):
+        line = re.sub(r"^\s*(?:[-•*]|\d+[.)])\s*", "", line).strip(" .;:")
+        tail = re.split(r"\b(?:i need|calculate|need)\b\s*:?", line, flags=re.IGNORECASE)
+        parts = re.split(r"\s*,\s*|\s+and\s+", tail[-1]) if len(tail) > 1 and ":" in line else [line]
+        for part in parts:
+            part = part.strip(" .;:")
+            words = part.split()
+            if (2 <= len(words) <= 10 and not re.search(r"\d", part) and not _ASKS_RE.search(part)
+                    and not re.search(r"\b(?:i'?m|i am|we are|designing|building)\b", part, re.IGNORECASE)):
+                items.append(part)
+    return items
+
+
 def plan_project(text: str) -> ProjectPlan:
+    plan = _plan_project(text)
+    if not plan.requested:
+        items = requested_items(text)
+        if items:
+            map_requested(plan, items)
+    return plan
+
+
+def _plan_project(text: str) -> ProjectPlan:
     if _provider() == "mock":
         return _mock_project(text)
     plan = call_structured(ProjectPlan, PROJECT_INSTRUCTION, text)
@@ -324,7 +403,8 @@ class AskResult(BaseModel):
 
 
 AI_OFF_MESSAGE = ("This question needs the AI to choose a calculation method, and the AI is not switched on for "
-                  "this tool yet (set AI_PROVIDER and an API key). Motor sizing and bearing life work without it. "
+                  "this tool yet (set AI_PROVIDER and an API key). Without it, the tool can do motor sizing, "
+                  "bearing life, and full project plans for shredders and bulk belt conveyors. "
                   "If you already know the torque and speed, use the 'Advanced: Torque & RPM' tab.")
 
 

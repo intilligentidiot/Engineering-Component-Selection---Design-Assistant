@@ -88,9 +88,36 @@
         }
         if (r.status !== "EVALUATED") { calcs.innerHTML = `<div class="sz-note danger"><ul>${(r.errors || []).map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>`; return; }
         renderInfo();
+        renderAsked(r);
         const done = r.calculations.filter(c => c.status === "DONE").length;
         progress.textContent = `${done} of ${r.calculations.length} calculations done`;
         calcs.innerHTML = plan.calculations.map((c, idx) => card(c, r.calculations[idx], idx + 1)).join("");
+    }
+
+    // "You asked for": each result the user listed, with its answer or what it is waiting for
+    function renderAsked(r) {
+        const box = $("pj-asked");
+        const items = plan.requested || [];
+        if (!items.length) { box.innerHTML = ""; return; }
+        const results = {}, from = {};
+        plan.calculations.forEach((c, idx) => {
+            const cr = r.calculations[idx];
+            (c.steps || []).forEach(s => { from[s.symbol] = { calc: c, res: cr }; });
+            (cr.steps || []).forEach(s => { results[s.symbol] = s; });
+        });
+        const rows = items.map(q => {
+            if (!q.symbol) return `<div class="pj-res"><span>${esc(q.text)}</span><strong class="pj-none">not calculated by this plan</strong></div>`;
+            const s = results[q.symbol];
+            if (s) return `<div class="pj-res"><span>${esc(q.text)}</span><strong>${fmt(s.result)} ${esc(s.unit)}</strong></div>`;
+            const inp = plan.inputs.find(i => i.symbol === q.symbol);
+            if (inp && values[q.symbol] !== undefined && values[q.symbol] !== "")
+                return `<div class="pj-res"><span>${esc(q.text)}</span><strong>${fmt(Number(values[q.symbol]))} ${esc(inp.unit)}</strong></div>`;
+            const f = from[q.symbol];
+            const why = f && f.res.status === "WAITING" ? `waiting for: ${f.res.waiting_for.join(", ")}` : "waiting for information";
+            return `<div class="pj-res"><span>${esc(q.text)}</span><strong class="pj-none">${esc(why)}</strong></div>`;
+        });
+        const done = items.filter(q => q.symbol && results[q.symbol]).length;
+        box.innerHTML = `<div class="pj-asked"><div class="pj-asked-head">You asked for <span class="pj-progress">${done} of ${items.length} answered</span></div>${rows.join("")}</div>`;
     }
 
     const badge = s => ({ DONE: `<span class="data-status MEETS">DONE</span>`, WAITING: `<span class="data-status DISCOVERED">WAITING</span>`,

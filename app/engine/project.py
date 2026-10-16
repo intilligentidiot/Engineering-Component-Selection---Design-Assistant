@@ -15,6 +15,7 @@ A calculation whose information is missing is reported as waiting (with what it
 needs) while the others still run.
 """
 import math
+import re
 from typing import Optional, List, Dict, Any
 
 from pydantic import BaseModel, Field
@@ -69,6 +70,11 @@ class ProjectCalc(BaseModel):
     note: Optional[str] = None
 
 
+class RequestedItem(BaseModel):
+    text: str = Field(..., description="A result the user explicitly asked for, in their words.")
+    symbol: Optional[str] = Field(None, description="Symbol of the step (or input) that answers it; null if none does.")
+
+
 class ProjectPlan(BaseModel):
     title: str = Field(..., description="e.g. 'Plastic shredder — calculation plan'.")
     machine: str = Field(..., description="The machine as the user described it.")
@@ -77,6 +83,8 @@ class ProjectPlan(BaseModel):
     inputs: List[ProjectInput] = Field(default_factory=list)
     calculations: List[ProjectCalc] = Field(default_factory=list)
     limitations: List[str] = Field(default_factory=list)
+    requested: List[RequestedItem] = Field(default_factory=list,
+                                           description="Each specific result the user listed, mapped to the step that answers it.")
 
 
 class CalcResult(BaseModel):
@@ -141,7 +149,33 @@ def validate_project(plan: ProjectPlan) -> List[str]:
                     problems.append(f"'{c.title}': '{l.symbol}' is not defined before this calculation.")
             if c.kind == "bearing_life" and c.bearing_type not in ("ball", "roller"):
                 problems.append(f"'{c.title}': bearing type must be 'ball' or 'roller'.")
+    for rq in plan.requested:
+        if rq.symbol is not None and rq.symbol not in defined:
+            rq.symbol = None   # an unknown link is shown as "not calculated by this plan", never guessed
     return problems
+
+
+_STOP = {"the", "of", "a", "an", "and", "for", "to", "at", "on", "in", "required", "total", "value", "values"}
+
+
+def _words(s: str) -> set:
+    return {w for w in re.findall(r"[a-z]+", s.lower()) if w not in _STOP and len(w) > 2}
+
+
+def map_requested(plan: ProjectPlan, items: List[str]) -> ProjectPlan:
+    """Link each result the user listed to the step whose name best matches it (by shared words)."""
+    candidates = [(s.symbol, s.name) for c in plan.calculations for s in c.steps]
+    out = []
+    for text in items:
+        want = _words(text)
+        best, score = None, 0
+        for sym, name in candidates:
+            sc = len(want & _words(name))
+            if sc > score:
+                best, score = sym, sc
+        out.append(RequestedItem(text=text, symbol=best if score >= max(1, (len(want) + 1) // 2) else None))
+    plan.requested = out
+    return plan
 
 
 # ─────────────────────────────────────────────────────────────

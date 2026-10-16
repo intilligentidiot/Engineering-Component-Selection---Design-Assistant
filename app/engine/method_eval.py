@@ -162,7 +162,9 @@ def _eval(node: ast.AST, env: Dict[str, float]) -> float:
 def _fmt(x: float) -> str:
     if x == 0:
         return "0"
-    if abs(x) >= 1e4 or abs(x) < 1e-3:
+    if 1e4 <= abs(x) < 1e12:
+        return f"{x:.0f}"           # 15670, not 1.567e+04
+    if abs(x) >= 1e12 or abs(x) < 1e-3:
         return f"{x:.4g}"
     return f"{float(f'{x:.4g}'):g}"
 

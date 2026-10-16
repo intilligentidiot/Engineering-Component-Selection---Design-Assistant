@@ -126,6 +126,30 @@ For the third kind:
 
 **Recommendation:** when a topic is used often, turn it into a checked module with its own hand-checked test, as was done for bearing life.
 
-## 10. Not yet supported
+## 10. Built-in project plans (work without the AI)
+
+When someone describes a whole project, the tool shows the information needed and every calculation in order. Results flow from one step to the next, and if the user lists the results they need, a "You asked for" box shows each one. Two plans are built in and **need review**:
+
+**Shredder** ([`app/engine/project.py`](../app/engine/project.py), `shredder_template`)
+- Cutting force F_b = τ_s·t·b per blade; total F = F_b·z.
+- Rotor torque T = F·D/2 per shaft, multiplied by the number of driven shafts.
+- Power P = T·ω, design power × SF.
+- Shaft diameter d = [16/(π·τ_allow)·√((SF·M)² + (SF·T)²)]^(1/3), with M = F·L/4 (force at mid-span).
+- Bearing load F/2, then ISO 281 life (roller bearing).
+- Suggested: SF 1.75 (heavy-shock row).
+
+**Bulk belt conveyor drive pulley** ([`app/engine/conveyor_template.py`](../app/engine/conveyor_template.py)), ISO 5048 / DIN 22101 simplified:
+- Load per metre m_G = Q/(3.6·v).
+- F_U = C·f·L·g·[m_R + (2·m_B + m_G)·cos δ] + H·g·m_G + F_S2.
+- Power P_A = F_U·v, motor power = P_A/η.
+- Pulley torque T = F_U·D/2.
+- Belt tensions by Euler–Eytelwein: T2 = F_U/(e^(μθ) − 1), T1 = F_U + T2; resultant on the pulley R = √(T1² + T2² − 2·T1·T2·cos θ).
+- Shaft: M = (R/2)·a; allowable stress = S_y/n_s; d_min = [32/(π·σ_allow)·√(M² + ¾T²)]^(1/3).
+- Bearings: R/2 each, then ISO 281 life.
+- Suggested values: f = 0.02, C ≈ 1.6 at 150 m, μ = 0.25, η = 0.9, n_s = 2.5, SF = 1.25.
+- **Please confirm the C value against the ISO 5048 table and the μ values.**
+- Not included: sag tension, start-up / braking tensions, belt capacity check, shaft fatigue and deflection.
+
+## 11. Not yet supported
 
 Bulk-material conveyors (CEMA), screw conveyors, mixers, pumps and fans, crushers, extruders, presses/punching, and vehicles. Each needs its own approved equations before it is added.

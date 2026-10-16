@@ -404,8 +404,10 @@ class MockSizingParser(SizingRequirementParser):
             scale_grp, val_grp = (1, 2) if m.group(1).isalpha() else (2, 1)
             self._set("hardness_value", float(m.group(val_grp)), m, consume=False)
             self._set("hardness_scale", f"Shore {m.group(scale_grp).upper()}", m)
-        stop = r"(?!(?:around|at|on|with|and|in|for|of|to|density|blocks?|parts?|each|weighing)\b)"
-        self._try("material_name", [r"(?:made of|made from|material(?: is|:)?)\s+(" + stop + r"[a-z][a-z\-]*(?:\s+" + stop + r"[a-z][a-z\-]*)?)"],
+        # Only "made of X", "made from X", "material is X" or "material: X", on the same line —
+        # never a bare "material" followed by unrelated words ("shaft material ⏎ i need …").
+        stop = r"(?!(?:around|at|on|with|and|in|for|of|to|density|blocks?|parts?|each|weighing|i|we|you|need)\b)"
+        self._try("material_name", [r"(?:made of|made from|material is|material:)[ \t]+(" + stop + r"[a-z][a-z\-]*(?:[ \t]+" + stop + r"[a-z][a-z\-]*)?)"],
                   lambda m: m.group(1).strip(), consume=False)
         if "material_name" in self._out:
             # quote must be just the material words
@@ -440,7 +442,8 @@ class MockSizingParser(SizingRequirementParser):
                 self._out.setdefault("part_shape", "tube")
                 self._quotes.append(FieldQuote(field="part_shape", quote=self._quotes[-1].quote))
             self._try("inner_diameter_mm", [r"(?:id|inner diameter|inside diameter)\s*(?:of|is|:)?\s*" + _N + L], self._mm)
-        shape_word = re.search(r"\b(rod|bar|cylinder|shaft|ball|sphere)s?\b", self._work, re.IGNORECASE)
+        # "shaft" is left out on purpose: it is almost always the machine's own shaft, not the part being moved
+        shape_word = re.search(r"\b(rod|bar|cylinder|ball|sphere)s?\b", self._work, re.IGNORECASE)
         if shape_word and "part_shape" not in self._out:
             if self._try("diameter_mm", [r"(?:ø|dia(?:meter)?\.?)\s*(?:of|is|:)?\s*" + _N + L, _N + L + r"\s*(?:dia(?:meter)?\b|ø)"], self._mm):
                 shape = "sphere" if shape_word.group(1).lower() in ("ball", "sphere") else "cylinder"

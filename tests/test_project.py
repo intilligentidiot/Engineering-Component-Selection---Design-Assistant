@@ -116,3 +116,51 @@ def test_project_evaluate_endpoint():
     out = client.post("/api/project-evaluate", json={"plan": shredder_template().model_dump(), "values": FULL}).json()
     assert out["status"] == "EVALUATED"
     assert {c["id"]: c["status"] for c in out["calculations"]}["shaft"] == "DONE"
+
+
+# ── Bulk belt conveyor (ISO 5048) — engineer's test case ─────
+
+from app.engine.conveyor_template import bulk_conveyor_template
+from app.ai.sizing_parser import MockSizingParser
+
+ENGINEER_TEXT = (
+    "I'm designing a heavy-duty belt conveyor drive pulley for iron ore, belt width 1200 mm, belt speed 2.5 m/s, "
+    "pulley diameter 630 mm, center-to-center distance 150 meters\n\n"
+    "Total equivalent belt tension\nRequired drive power\nPulley shaft torque\nShaft bending moment\n"
+    "Allowable bending stress of the shaft material\n\ni need this value or information"
+)
+CONV = dict(Q=1000, v=2.5, L=150, H=0, D=630, m_B=25, m_R=20, f=0.02, C=1.6, F_S2=0, mu=0.25, theta=180,
+            eta=0.9, a=300, Sy=350, n_s=2.5, SF=1.25, V=400, life_req=40000)
+
+
+def test_bulk_conveyor_template_hand_checked():
+    assert validate_project(bulk_conveyor_template()) == []
+    v = _results(evaluate_project(bulk_conveyor_template(), CONV))
+    m_G = 1000 / (3.6 * 2.5)
+    F_U = 1.6 * 0.02 * 150 * 9.80665 * (20 + 2 * 25 + m_G)
+    assert v["F_U"] == pytest.approx(F_U)                               # ≈ 8525 N
+    assert v["P_A"] == pytest.approx(F_U * 2.5 / 1000)                  # ≈ 21.3 kW
+    assert v["T"] == pytest.approx(F_U * 0.315)                         # ≈ 2685 N·m
+    T2 = F_U / (math.exp(0.25 * math.pi) - 1)
+    assert v["R"] == pytest.approx(F_U + 2 * T2)                        # at 180° wrap R = T1 + T2
+    assert v["M"] == pytest.approx((F_U + 2 * T2) / 2 * 0.3)
+    assert v["sigma_allow"] == pytest.approx(140)
+
+
+def test_engineer_text_opens_conveyor_plan_with_requested_results():
+    r = ask(ENGINEER_TEXT)
+    assert r.topic == "project" and r.project.title.startswith("Bulk belt conveyor")
+    given = {i.symbol: i.value for i in r.project.inputs if i.value is not None}
+    assert given == {"v": 2.5, "D": 630, "L": 150, "B": 1200}
+    assert [(q.text, q.symbol) for q in r.project.requested] == [
+        ("Total equivalent belt tension", "R"), ("Required drive power", "P_A"), ("Pulley shaft torque", "T"),
+        ("Shaft bending moment", "M"), ("Allowable bending stress of the shaft material", "sigma_allow")]
+
+
+def test_small_parts_conveyor_still_uses_motor_sizing():
+    assert ask("Conveyor moving 20 plastic blocks 200x100x50 mm, belt speed 0.5 m/s").topic == "motor_sizing"
+
+
+def test_material_name_not_taken_from_unrelated_words():
+    r = MockSizingParser().parse("conveyor, shaft material\n\ni need this value")
+    assert not any(v.path == "material.name" for v in r.values)
