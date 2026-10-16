@@ -193,3 +193,25 @@ def test_full_query_with_two_items_left_out_is_completed_by_suggestions():
     assert answers["Pulley shaft torque"] == pytest.approx(2685.5, abs=0.5)
     assert answers["Shaft bending moment"] == pytest.approx(3422.1, abs=0.5)
     assert answers["Allowable bending stress of the shaft material"] == pytest.approx(140)
+
+
+def test_project_motor_step_can_include_internet_results(monkeypatch):
+    import app.engine.discover as disc
+    seen = {}
+    def fake(**kw):
+        seen.update(kw)
+        return [{"manufacturer": "Maker", "product_name": "Gearmotor", "part_number": "GM-1",
+                 "engineering_status": "DATA_INCOMPLETE", "fit": None, "product_url": "https://example.com",
+                 "performance": {}}]
+    monkeypatch.setattr(disc, "discover_and_evaluate_components", fake)
+    monkeypatch.delenv("SERPAPI_KEY", raising=False)
+    from app.engine.conveyor_template import bulk_conveyor_template
+    from app.database.database import SessionLocal
+    db = SessionLocal()
+    try:
+        r = evaluate_project(bulk_conveyor_template(), CONV, db=db, include_internet=True)
+    finally:
+        db.close()
+    motor = next(c for c in r.calculations if c.id == "motor")
+    assert motor.internet_source == "MOCK" and motor.internet[0]["part_number"] == "GM-1"
+    assert seen["required_torque_nm"] == pytest.approx(next(s.result for c in r.calculations for s in c.steps if s.symbol == "T"))

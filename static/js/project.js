@@ -80,7 +80,7 @@
         const vals = Object.fromEntries(plan.inputs.map(i => [i.symbol, values[i.symbol] === undefined || values[i.symbol] === "" ? null : Number(values[i.symbol])]));
         let r;
         try {
-            const res = await fetch(`${API}/api/project-evaluate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ plan, values: vals }) });
+            const res = await fetch(`${API}/api/project-evaluate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ plan, values: vals, include_internet: $("pj-internet").checked }) });
             r = await res.json();
             if (!res.ok) throw new Error(typeof r.detail === "string" ? r.detail : "The plan could not be calculated.");
         } catch (err) {
@@ -156,11 +156,20 @@
                     ${(b.notes || []).map(x => `<p class="field-hint">${esc(x)}</p>`).join("")}</details>`;
         } else {
             const m = r.motors || [];
+            const net = r.internet;
+            const netHtml = net == null ? "" : `
+                <div class="pj-net-head">Internet search ${r.internet_source === "MOCK" ? `<span class="data-status DISCOVERED">SAMPLE DATA — no search key set</span>`
+                    : r.internet_source === "UNAVAILABLE" ? `<span class="data-status DOES_NOT_MEET">UNAVAILABLE</span>` : ""}</div>
+                ${net.length ? `<div class="pj-results">${net.map(x => `<div class="pj-res"><span>${esc(x.manufacturer)} ${esc(x.product || "")} ${x.part_number ? "· " + esc(x.part_number) : ""}
+                        ${x.url ? ` <a class="source-link" href="${esc(x.url)}" target="_blank" rel="noopener">product page</a>` : ""}</span>
+                    <strong>${x.output_torque_nm != null ? fmt(x.output_torque_nm) + " N·m @ " + fmt(x.output_speed_rpm) + " rpm " : ""}<span class="data-status ${esc(x.status)}">${esc((x.status || "").replace(/_/g, " "))}</span>
+                    ${x.fit != null ? `<span class="fit-pill">${x.fit}% fit</span>` : ""}</strong></div>`).join("")}</div>`
+                  : `<div class="pj-wait">No internet product met the requirement.</div>`}`;
             bodyHtml = m.length
                 ? `<div class="pj-results">${m.map((x, i) => `<div class="pj-res"><span>${i + 1}. ${esc(x.motor)} (${esc(x.motor_maker)}) + ${esc(x.gearbox)} ${x.ratio}:1</span>
-                    <strong>${fmt(x.output_torque_nm)} N·m @ ${fmt(x.output_speed_rpm)} rpm ${x.fit != null ? `<span class="fit-pill">${x.fit}% fit</span>` : ""}</strong></div>`).join("")}</div>`
+                    <strong>${fmt(x.output_torque_nm)} N·m @ ${fmt(x.output_speed_rpm)} rpm ${x.fit != null ? `<span class="fit-pill">${x.fit}% fit</span>` : ""}</strong></div>`).join("")}</div>${netHtml}`
                 : `<div class="pj-wait">No motor + gearbox in the built-in list can deliver ${fmt(r.used.required_torque_nm)} N·m × ${fmt(r.used.service_factor ?? 1)} at ${fmt(r.used.required_speed_rpm)} rpm on ${fmt(r.used.max_voltage_v)} V.
-                    The built-in list only has small motors — use these requirements with a supplier, or the Advanced tab with internet search.</div>`;
+                    Tick "Also search the internet" above, or use these requirements with a supplier.</div>${netHtml}`;
         }
         const noMatch = c.kind === "motor_selection" && r.status === "DONE" && !(r.motors || []).length;
         const tag = noMatch ? `<span class="data-status DATA_INCOMPLETE">NO MATCH IN LIST</span>` : badge(r.status);

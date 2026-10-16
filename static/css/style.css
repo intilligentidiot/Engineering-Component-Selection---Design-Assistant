@@ -516,3 +516,6 @@ body {
 .pj-asked-head { font-weight: 700; color: var(--blue-400); margin-bottom: 0.5rem; }
 .pj-asked .pj-res strong { color: var(--silver-100); }
 .pj-none { color: var(--amber-400) !important; font-weight: 500; font-size: 0.8rem; }
+.pj-net-head { margin: 0.8rem 0 0 2.35rem; font-size: 0.82rem; font-weight: 600; color: var(--blue-400); display: flex; gap: 0.5rem; align-items: center; }
+.pj-card .source-link { font-size: 0.75rem; }
+@media (max-width: 720px) { .pj-net-head { margin-left: 0; } }

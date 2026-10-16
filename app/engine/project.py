@@ -97,6 +97,8 @@ class CalcResult(BaseModel):
     steps: List[EvaluatedStep] = []
     bearing: Optional[Dict[str, Any]] = None
     motors: Optional[List[Dict[str, Any]]] = None
+    internet: Optional[List[Dict[str, Any]]] = None      # Source B products (when requested)
+    internet_source: Optional[str] = None                # LIVE | MOCK | UNAVAILABLE
     used: Dict[str, float] = {}
 
 
@@ -184,7 +186,7 @@ def map_requested(plan: ProjectPlan, items: List[str]) -> ProjectPlan:
 # Evaluation
 # ─────────────────────────────────────────────────────────────
 
-def evaluate_project(plan: ProjectPlan, values: Dict[str, Any], db=None) -> ProjectResult:
+def evaluate_project(plan: ProjectPlan, values: Dict[str, Any], db=None, include_internet: bool = False) -> ProjectResult:
     problems = validate_project(plan)
     if problems:
         return ProjectResult(status="INVALID_PLAN", errors=problems)
@@ -208,7 +210,7 @@ def evaluate_project(plan: ProjectPlan, values: Dict[str, Any], db=None) -> Proj
             for s in c.steps:
                 names.setdefault(s.symbol, f"{s.name} (from '{c.title}')")
         else:
-            results.append(_run_module(c, env, names, db))
+            results.append(_run_module(c, env, names, db, include_internet))
     return ProjectResult(status="EVALUATED", calculations=results, missing_inputs=missing_inputs)
 
 
@@ -241,7 +243,8 @@ def _run_formula(c: ProjectCalc, env: Dict[str, float], names: Dict[str, str]) -
     return CalcResult(id=c.id, status="DONE", steps=steps)
 
 
-def _run_module(c: ProjectCalc, env: Dict[str, float], names: Dict[str, str], db) -> CalcResult:
+def _run_module(c: ProjectCalc, env: Dict[str, float], names: Dict[str, str], db,
+                include_internet: bool = False) -> CalcResult:
     args = {l.param: env[l.symbol] for l in c.links if l.symbol in env}
     needs = [names.get(l.symbol, l.symbol) for l in c.links
              if l.symbol not in env and l.param in REQUIRED_LINKS[c.kind]]
@@ -275,7 +278,31 @@ def _run_module(c: ProjectCalc, env: Dict[str, float], names: Dict[str, str], db
                "output_speed_rpm": r["performance"]["output_speed_rpm"],
                "output_torque_nm": r["performance"]["output_torque_nm"],
                "status": r["engineering_status"], "fit": (r["fit"] or {}).get("percent")} for r in recs]
-    return CalcResult(id=c.id, status="DONE", used=args, motors=motors)
+    result = CalcResult(id=c.id, status="DONE", used=args, motors=motors)
+    if include_internet:
+        _add_internet(result, args, db)
+    return result
+
+
+def _add_internet(result: CalcResult, args: Dict[str, float], db) -> None:
+    """Source B: internet-discovered gearmotors, evaluated by the same deterministic checks."""
+    import os
+    from app.engine.discover import discover_and_evaluate_components
+    try:
+        found = discover_and_evaluate_components(
+            db=db, required_speed_rpm=args["required_speed_rpm"], required_torque_nm=args["required_torque_nm"],
+            service_factor=args.get("service_factor", 1.0), max_voltage_v=args["max_voltage_v"], top_n=5,
+            peak_torque_nm=args.get("peak_torque_nm"))
+    except Exception:
+        result.internet, result.internet_source = [], "UNAVAILABLE"
+        return
+    result.internet_source = "LIVE" if os.environ.get("SERPAPI_KEY") else "MOCK"
+    result.internet = [{"manufacturer": f.get("manufacturer"), "product": f.get("product_name"),
+                        "part_number": f.get("part_number"), "status": f.get("engineering_status"),
+                        "fit": (f.get("fit") or {}).get("percent"), "url": f.get("product_url"),
+                        "datasheet": f.get("datasheet_url"), "source": f.get("source"),
+                        "output_torque_nm": (f.get("performance") or {}).get("output_torque_nm"),
+                        "output_speed_rpm": (f.get("performance") or {}).get("output_speed_rpm")} for f in found]
 
 
 # ─────────────────────────────────────────────────────────────
