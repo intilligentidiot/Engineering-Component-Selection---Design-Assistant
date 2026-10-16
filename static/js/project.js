@@ -61,15 +61,25 @@
                     <div class="pj-src">${typical[i.symbol] ? "Suggested: " + esc(typical[i.symbol])
                         : estimated[i.symbol] ? esc(estimated[i.symbol]) : "Where to get it: " + esc(i.source_hint)}</div>
                     ${i.estimate && !quotes[i.symbol] ? `<button type="button" class="link-btn pj-est-btn" data-est="${i.symbol}">${estimated[i.symbol] ? "Change estimate" : "Don't have it? Estimate it"}</button>` : ""}</div>
-                <div class="input-row pj-input"><input type="number" step="any" data-pj="${i.symbol}" value="${esc(values[i.symbol] ?? "")}">${i.unit ? `<span class="unit-badge">${esc(i.unit)}</span>` : ""}</div>
+                <div class="input-row pj-input"><input type="number" step="any" data-pj="${i.symbol}" value="${esc(shownValue(i))}">${
+                    i.unit ? (Units.family(i.unit) ? `<span class="unit-badge u-badge">${Units.unitSelect(i.unit, Units.displayUnit(i.unit))}</span>` : `<span class="unit-badge">${esc(i.unit)}</span>`) : ""}</div>
                 <div class="pj-est" id="pj-est-${i.symbol}" hidden></div>
             </div>`).join("");
     }
 
+    // Values are stored in the plan's unit; the box shows them in the engineer's chosen unit
+    function shownValue(i) {
+        const v = values[i.symbol];
+        if (v === undefined || v === null || v === "") return "";
+        return String(Number(Units.convert(Number(v), i.unit, Units.displayUnit(i.unit)).toPrecision(6)));
+    }
+    Units.onChange(() => { if (plan && !area.hidden) renderInfo(); });
+
     info.addEventListener("input", e => {
         const k = e.target.dataset.pj;
         if (!k) return;
-        values[k] = e.target.value;
+        const inpDef = plan.inputs.find(x => x.symbol === k);
+        values[k] = e.target.value === "" ? "" : Units.convert(Number(e.target.value), Units.displayUnit(inpDef.unit), inpDef.unit);
         delete quotes[k]; delete typical[k]; delete estimated[k];
         const row = e.target.closest(".pj-row");
         row.classList.remove("suggested", "estimated");
@@ -174,10 +184,10 @@
         const rows = items.map(q => {
             if (!q.symbol) return `<div class="pj-res"><span>${esc(q.text)}</span><strong class="pj-none">not calculated by this plan</strong></div>`;
             const s = results[q.symbol];
-            if (s) return `<div class="pj-res"><span>${esc(q.text)}</span><strong>${fmt(s.result)} ${esc(s.unit)}</strong></div>`;
+            if (s) return `<div class="pj-res"><span>${esc(q.text)}</span><strong>${Units.valueHtml(s.result, s.unit)}</strong></div>`;
             const inp = plan.inputs.find(i => i.symbol === q.symbol);
             if (inp && values[q.symbol] !== undefined && values[q.symbol] !== "")
-                return `<div class="pj-res"><span>${esc(q.text)}</span><strong>${fmt(Number(values[q.symbol]))} ${esc(inp.unit)}</strong></div>`;
+                return `<div class="pj-res"><span>${esc(q.text)}</span><strong>${Units.valueHtml(Number(values[q.symbol]), inp.unit)}</strong></div>`;
             const f = from[q.symbol];
             const why = f && f.res.status === "WAITING" ? `waiting for: ${f.res.waiting_for.join(", ")}` : "waiting for information";
             return `<div class="pj-res"><span>${esc(q.text)}</span><strong class="pj-none">${esc(why)}</strong></div>`;
@@ -196,8 +206,8 @@
         } else if (r.status === "ERROR") {
             bodyHtml = `<div class="sz-note danger"><ul>${r.errors.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>`;
         } else if (c.kind === "formula") {
-            bodyHtml = `<div class="pj-results">${r.steps.map(s => `<div class="pj-res"><span>${esc(s.name)}</span><strong>${fmt(s.result)} ${esc(s.unit)}</strong></div>`).join("")}</div>
-                <details class="sz-details"><summary>Show working</summary><ol class="sz-steps">${r.steps.map((s, i) => `
+            bodyHtml = `<div class="pj-results">${r.steps.map(s => `<div class="pj-res"><span>${esc(s.name)}</span><strong>${Units.valueHtml(s.result, s.unit)}</strong></div>`).join("")}</div>
+                <details class="sz-details"><summary>Show working <span class="u-note">(in the units used for the calculation)</span></summary><ol class="sz-steps">${r.steps.map((s, i) => `
                     <li class="sz-stepline"><div class="sz-step-head"><span class="sz-step-n">${i + 1}</span> ${esc(s.name)}</div>
                     <div class="sz-formula">${esc(s.formula)}</div><div class="sz-subst">${esc(s.substitution)}</div>
                     ${s.note ? `<div class="sz-step-note">${esc(s.note)}</div>` : ""}</li>`).join("")}</ol></details>`;
@@ -205,9 +215,9 @@
             const b = r.bearing;
             const st = { MEETS: badge("DONE").replace("DONE", "MEETS"), DOES_NOT_MEET: `<span class="data-status DOES_NOT_MEET">DOES NOT MEET</span>` }[b.status] || "";
             bodyHtml = `<div class="pj-results">
-                ${b.life_h != null ? `<div class="pj-res"><span>Expected life (${esc(c.bearing_type)} bearing)</span><strong>${fmt(b.life_h)} h ${st}</strong></div>` : ""}
-                ${b.min_dynamic_rating_kn != null ? `<div class="pj-res"><span>Minimum dynamic load rating C</span><strong>${fmt(b.min_dynamic_rating_kn)} kN</strong></div>` : ""}
-                <div class="pj-res"><span>Equivalent load P</span><strong>${fmt(b.equivalent_load_n)} N</strong></div></div>
+                ${b.life_h != null ? `<div class="pj-res"><span>Expected life (${esc(c.bearing_type)} bearing)</span><strong>${Units.valueHtml(b.life_h, "h")} ${st}</strong></div>` : ""}
+                ${b.min_dynamic_rating_kn != null ? `<div class="pj-res"><span>Minimum dynamic load rating C</span><strong>${Units.valueHtml(b.min_dynamic_rating_kn, "kN")}</strong></div>` : ""}
+                <div class="pj-res"><span>Equivalent load P</span><strong>${Units.valueHtml(b.equivalent_load_n, "N")}</strong></div></div>
                 <details class="sz-details"><summary>Show working</summary><ol class="sz-steps">${b.steps.map((s, i) => `
                     <li class="sz-stepline"><div class="sz-step-head"><span class="sz-step-n">${i + 1}</span> ${esc(s.label)}</div>
                     <div class="sz-formula">${esc(s.formula)}</div><div class="sz-subst">${esc(s.substitution)}</div></li>`).join("")}</ol>
@@ -220,13 +230,13 @@
                     : r.internet_source === "UNAVAILABLE" ? `<span class="data-status DOES_NOT_MEET">UNAVAILABLE</span>` : ""}</div>
                 ${net.length ? `<div class="pj-results">${net.map(x => `<div class="pj-res"><span>${esc(x.manufacturer)} ${esc(x.product || "")} ${x.part_number ? "· " + esc(x.part_number) : ""}
                         ${x.url ? ` <a class="source-link" href="${esc(x.url)}" target="_blank" rel="noopener">product page</a>` : ""}</span>
-                    <strong>${x.output_torque_nm != null ? fmt(x.output_torque_nm) + " N·m @ " + fmt(x.output_speed_rpm) + " rpm " : ""}<span class="data-status ${esc(x.status)}">${esc((x.status || "").replace(/_/g, " "))}</span>
+                    <strong>${x.output_torque_nm != null ? Units.valueHtml(x.output_torque_nm, "N·m") + " @ " + Units.valueHtml(x.output_speed_rpm, "rpm") + " " : ""}<span class="data-status ${esc(x.status)}">${esc((x.status || "").replace(/_/g, " "))}</span>
                     ${x.fit != null ? `<span class="fit-pill">${x.fit}% fit</span>` : ""}</strong></div>`).join("")}</div>`
                   : `<div class="pj-wait">No internet product met the requirement.</div>`}`;
             bodyHtml = m.length
                 ? `<div class="pj-results">${m.map((x, i) => `<div class="pj-res"><span>${i + 1}. ${esc(x.motor)} (${esc(x.motor_maker)}) + ${esc(x.gearbox)} ${x.ratio}:1</span>
-                    <strong>${fmt(x.output_torque_nm)} N·m @ ${fmt(x.output_speed_rpm)} rpm ${x.fit != null ? `<span class="fit-pill">${x.fit}% fit</span>` : ""}</strong></div>`).join("")}</div>${netHtml}`
-                : `<div class="pj-wait">No motor + gearbox in the built-in list can deliver ${fmt(r.used.required_torque_nm)} N·m × ${fmt(r.used.service_factor ?? 1)} at ${fmt(r.used.required_speed_rpm)} rpm on ${fmt(r.used.max_voltage_v)} V.
+                    <strong>${Units.valueHtml(x.output_torque_nm, "N·m")} @ ${Units.valueHtml(x.output_speed_rpm, "rpm")} ${x.fit != null ? `<span class="fit-pill">${x.fit}% fit</span>` : ""}</strong></div>`).join("")}</div>${netHtml}`
+                : `<div class="pj-wait">No motor + gearbox in the built-in list can deliver ${Units.valueHtml(r.used.required_torque_nm, "N·m")} × ${fmt(r.used.service_factor ?? 1)} at ${Units.valueHtml(r.used.required_speed_rpm, "rpm")} on ${Units.valueHtml(r.used.max_voltage_v, "V")}.
                     Tick "Also search the internet" above, or use these requirements with a supplier.</div>${netHtml}`;
         }
         const noMatch = c.kind === "motor_selection" && r.status === "DONE" && !(r.motors || []).length;

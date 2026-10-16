@@ -531,3 +531,19 @@ body {
 .pj-est-title { font-weight: 600; font-size: 0.86rem; margin-bottom: 0.2rem; }
 .pj-est-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.8rem 1rem; margin: 0.7rem 0; }
 .pj-est-msg { color: var(--amber-400); }
+
+/* Units: header preset + per-value unit dropdowns */
+.units-pick { display: flex; align-items: center; gap: 0.4rem; font-size: 0.78rem; color: rgba(255,255,255,0.8); margin-left: auto; margin-right: 1rem; }
+.units-pick select { background: rgba(0,0,0,0.35); color: #fff; border: 1px solid rgba(255,255,255,0.25); border-radius: var(--radius-sm);
+                     padding: 0.3rem 0.5rem; font-family: var(--font); font-size: 0.78rem; cursor: pointer; }
+.units-pick select option { background: var(--dark-800); }
+.u-val { white-space: nowrap; }
+select.u-sel { background: transparent; color: var(--silver-400); border: 1px solid transparent; border-radius: 4px;
+               font-family: var(--font); font-size: 0.8em; padding: 0 0.15rem; cursor: pointer; }
+select.u-sel:hover, select.u-sel:focus { border-color: var(--dark-500); color: var(--silver-100); outline: none; }
+select.u-sel option { background: var(--dark-800); color: var(--silver-100); }
+.unit-badge.u-badge { padding: 0 0.3rem; }
+.unit-badge.u-badge select.u-sel { color: var(--silver-400); font-size: 0.76rem; font-weight: 700; }
+.u-note { font-weight: 400; color: var(--silver-600); font-size: 0.75rem; }
+.sz-req-val select.u-sel { font-size: 0.5em; vertical-align: middle; }
+@media (max-width: 720px) { .units-pick { margin: 0.4rem 0 0; } }

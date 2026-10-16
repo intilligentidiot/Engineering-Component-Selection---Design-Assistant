@@ -198,7 +198,7 @@
         panel.hidden = false;
     }
 
-    const card = (label, val, unit, subtext, cls = "") => `<div class="sz-req ${cls}"><div class="sz-req-label">${esc(label)}</div><div class="sz-req-val">${fmt(val)} <span>${esc(unit)}</span></div>${subtext ? `<div class="sz-req-sub">${esc(subtext)}</div>` : ""}</div>`;
+    const card = (label, val, unit, subtext, cls = "") => `<div class="sz-req ${cls}"><div class="sz-req-label">${esc(label)}</div><div class="sz-req-val">${Units.family(unit) ? Units.valueHtml(val, unit) : `${fmt(val)} <span>${esc(unit)}</span>`}</div>${subtext ? `<div class="sz-req-sub">${esc(subtext)}</div>` : ""}</div>`;
     const stepsHtml = steps => `<ol class="sz-steps">${steps.map((s, i) => `
         <li class="sz-stepline">
             <div class="sz-step-head"><span class="sz-step-n">${i + 1}</span> ${esc(s.label || s.name)}</div>

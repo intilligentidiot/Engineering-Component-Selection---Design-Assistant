@@ -532,12 +532,12 @@
         proofTitle.textContent = "What your machine needs";
         proofSub.textContent = `${appName}${body.material?.name ? " · " + body.material.name : ""} — calculated only from your inputs, physical constants and the defaults listed below.`;
 
-        const card = (label, val, unit, sub, cls = "") => `<div class="sz-req ${cls}"><div class="sz-req-label">${label}</div><div class="sz-req-val">${fmt(val)} <span>${unit}</span></div>${sub ? `<div class="sz-req-sub">${sub}</div>` : ""}</div>`;
+        const card = (label, val, unit, sub, cls = "") => `<div class="sz-req ${cls}"><div class="sz-req-label">${label}</div><div class="sz-req-val">${Units.family(unit) ? Units.valueHtml(val, unit) : `${fmt(val)} <span>${unit}</span>`}</div>${sub ? `<div class="sz-req-sub">${sub}</div>` : ""}</div>`;
 
         const points = sized.operating_points.length > 1 ? `
             <h4 class="sz-sub">Operating points</h4>
             <table class="spec-table sz-points"><tr><td><strong>Point</strong></td><td><strong>Speed</strong></td><td><strong>Running torque</strong></td><td><strong>Peak torque</strong></td></tr>
-            ${sized.operating_points.map(p => `<tr><td>${esc(p.label)}</td><td>${fmt(p.speed_rpm)} rpm</td><td>${fmt(p.run_torque_nm)} N·m</td><td>${fmt(p.peak_torque_nm)} N·m</td></tr>`).join("")}
+            ${sized.operating_points.map(p => `<tr><td>${esc(p.label)}</td><td>${Units.valueHtml(p.speed_rpm, "rpm")}</td><td>${Units.valueHtml(p.run_torque_nm, "N·m")}</td><td>${Units.valueHtml(p.peak_torque_nm, "N·m")}</td></tr>`).join("")}
             </table>` : "";
 
         const steps = sized.steps.map((s, i) => {
