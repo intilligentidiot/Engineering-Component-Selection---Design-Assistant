@@ -7,7 +7,30 @@ then the checked motor + gearbox selection and ISO 281 bearing modules.
 Not yet approved by an engineer — see docs/ENGINEERING_DEFAULTS_TO_REVIEW.md.
 """
 from app.engine.method_eval import PlanStep
-from app.engine.project import ProjectPlan, ProjectCalc, Link, _i
+from app.engine.project import ProjectPlan, ProjectCalc, Link, EstimateHelper, _i, _e
+
+BELT_MASS_ESTIMATE = EstimateHelper(
+    title="Estimate from belt width and total belt thickness",
+    note=("Mass per metre = width × total thickness × average belt density. Replace it with the belt "
+          "manufacturer's datasheet value once the belt is chosen."),
+    inputs=[_e("B_e", "Belt width", "mm", from_input="B"),
+            _e("t_b", "Total belt thickness (carcass + top and bottom covers)", "mm"),
+            _e("rho_b", "Average belt density", "kg/m³", typical=1150,
+               note="Fabric (EP) rubber belts are typically about 1,100–1,200 kg/m³. Steel-cord belts are heavier — use the datasheet.")],
+    expression="B_e / 1000 * t_b / 1000 * rho_b")
+
+IDLER_MASS_ESTIMATE = EstimateHelper(
+    title="Estimate from idler roll mass and spacing",
+    note=("Rotating mass per metre = carrying rolls × roll mass ÷ carrying spacing + return rolls × roll mass ÷ "
+          "return spacing. Roll rotating masses are listed in the idler catalogue."),
+    inputs=[_e("m_rc", "Rotating mass of one carrying roll", "kg"),
+            _e("z_c", "Rolls per carrying idler set", "", typical=3, note="3 rolls for a standard troughed belt."),
+            _e("a_c", "Carrying idler spacing", "m", typical=1.2,
+               note="Typically 1.0–1.5 m (closer at loading points); use your layout."),
+            _e("m_rr", "Rotating mass of one return roll", "kg"),
+            _e("z_r", "Rolls per return idler set", "", typical=1, note="1 flat return roll (2 for V-return)."),
+            _e("a_r", "Return idler spacing", "m", typical=3.0, note="Typically about 3 m; use your layout.")],
+    expression="z_c * m_rc / a_c + z_r * m_rr / a_r")
 
 
 def _s(sym, name, unit, expr, note=None):
@@ -29,9 +52,10 @@ def bulk_conveyor_template(machine: str = "Belt conveyor (bulk material)") -> Pr
             _i("H", "Lift height (0 if horizontal, positive if conveying upward)", "m", "Your layout"),
             _i("D", "Drive pulley diameter", "mm", "Your design / pulley catalogue"),
             _i("B", "Belt width (for belt selection; not used in the power formula)", "mm", "Your design", optional=True),
-            _i("m_B", "Belt mass per metre", "kg/m", "Belt manufacturer's datasheet"),
+            _i("m_B", "Belt mass per metre", "kg/m", "Belt manufacturer's datasheet", estimate=BELT_MASS_ESTIMATE),
             _i("m_R", "Rotating idler mass per metre of conveyor (carry + return)", "kg/m",
-               "Idler catalogue: rotating mass of each idler set divided by idler spacing, carrying + return side"),
+               "Idler catalogue: rotating mass of each idler set divided by idler spacing, carrying + return side",
+               estimate=IDLER_MASS_ESTIMATE),
             _i("f", "Artificial friction coefficient", "", "ISO 5048 / DIN 22101", typical=0.02,
                note="ISO 5048: 0.02 for normal conditions; 0.023–0.03 for poor alignment, low temperature or heavy loading."),
             _i("C", "Length coefficient (secondary resistances)", "", "ISO 5048 table of C against conveyor length", typical=1.6,

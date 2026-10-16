@@ -519,3 +519,15 @@ body {
 .pj-net-head { margin: 0.8rem 0 0 2.35rem; font-size: 0.82rem; font-weight: 600; color: var(--blue-400); display: flex; gap: 0.5rem; align-items: center; }
 .pj-card .source-link { font-size: 0.75rem; }
 @media (max-width: 720px) { .pj-net-head { margin-left: 0; } }
+
+/* Estimate helpers on project inputs */
+.pj-tag.est { background: rgba(66,165,245,0.15); color: var(--blue-400); cursor: help; }
+.pj-row.estimated .input-row { border-color: var(--blue-400); }
+.pj-row.estimated .pj-src { color: var(--blue-400); }
+.pj-est-btn { padding: 0.2rem 0; font-size: 0.78rem; color: var(--blue-400); }
+.pj-est { grid-column: 1 / -1; margin: 0.4rem 0 0.2rem; padding: 0.8rem 1rem; border-radius: var(--radius-sm);
+          background: var(--dark-800); border: 1px dashed rgba(66,165,245,0.4); }
+.pj-est[hidden] { display: none; }
+.pj-est-title { font-weight: 600; font-size: 0.86rem; margin-bottom: 0.2rem; }
+.pj-est-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.8rem 1rem; margin: 0.7rem 0; }
+.pj-est-msg { color: var(--amber-400); }

@@ -215,3 +215,42 @@ def test_project_motor_step_can_include_internet_results(monkeypatch):
     motor = next(c for c in r.calculations if c.id == "motor")
     assert motor.internet_source == "MOCK" and motor.internet[0]["part_number"] == "GM-1"
     assert seen["required_torque_nm"] == pytest.approx(next(s.result for c in r.calculations for s in c.steps if s.symbol == "T"))
+
+
+# ── Estimate helpers ─────────────────────────────────────────
+
+from app.engine.method_eval import MethodPlan, PlanInput, evaluate_method as _eval_method
+
+
+def _run_estimate(helper, values):
+    plan = MethodPlan(title=helper.title, summary=helper.note,
+                      inputs=[PlanInput(symbol=x.symbol, name=x.name, unit=x.unit) for x in helper.inputs],
+                      steps=[PlanStep(symbol="est_value", name="estimate", unit="", expression=helper.expression)],
+                      result_symbols=["est_value"])
+    return _eval_method(plan, values).results[0].result
+
+
+def test_belt_mass_estimate():
+    m_B = next(i for i in bulk_conveyor_template().inputs if i.symbol == "m_B")
+    # 1.2 m wide × 0.016 m thick × 1150 kg/m³ = 22.08 kg/m
+    assert _run_estimate(m_B.estimate, {"B_e": 1200, "t_b": 16, "rho_b": 1150}) == pytest.approx(22.08)
+    assert next(x for x in m_B.estimate.inputs if x.symbol == "B_e").from_input == "B"
+
+
+def test_idler_mass_estimate():
+    m_R = next(i for i in bulk_conveyor_template().inputs if i.symbol == "m_R")
+    # 3 × 8 kg / 1.2 m + 1 × 20 kg / 3 m = 20 + 6.67 = 26.67 kg/m
+    assert _run_estimate(m_R.estimate, {"m_rc": 8, "z_c": 3, "a_c": 1.2, "m_rr": 20, "z_r": 1, "a_r": 3}) == pytest.approx(26.667, abs=1e-3)
+
+
+def test_asme_allowable_shear_estimate():
+    tau = next(i for i in shredder_template().inputs if i.symbol == "tau_allow")
+    # min(0.3 × 350, 0.18 × 600) × 0.75 = min(105, 108) × 0.75 = 78.75 MPa
+    assert _run_estimate(tau.estimate, {"Sy_e": 350, "Sut_e": 600, "k_kw": 0.75}) == pytest.approx(78.75)
+
+
+def test_broken_estimate_formula_is_rejected():
+    p = bulk_conveyor_template()
+    m_B = next(i for i in p.inputs if i.symbol == "m_B")
+    m_B.estimate.expression = "B_e * unknown_thing"
+    assert any("unknown_thing" in x for x in validate_project(p))

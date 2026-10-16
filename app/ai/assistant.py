@@ -276,7 +276,10 @@ PROJECT_INSTRUCTION = (
     "in the step name. "
     "8) Use the recognised method for the machine type (e.g. ISO 5048 / DIN 22101 or CEMA for bulk belt conveyors), "
     "never a simplified method meant for a different kind of machine. "
-    "9) Put the symbols of the main results an engineer would look for first into key_symbols."
+    "9) Put the symbols of the main results an engineer would look for first into key_symbols. "
+    "10) For a needed input that engineers often estimate from simpler data before a datasheet is available "
+    "(e.g. belt mass from width and thickness), you may add an estimate helper: its own inputs and one formula "
+    "using only those inputs."
 )
 
 _SHRED_VALUES = [

@@ -41,6 +41,22 @@ REQUIRED_LINKS = {
 # Schema
 # ─────────────────────────────────────────────────────────────
 
+class EstimateInput(BaseModel):
+    symbol: str = Field(..., description="Identifier used in the estimate formula.")
+    name: str = Field(..., description="Plain-English name.")
+    unit: str = Field(..., description="Unit the value is entered in.")
+    from_input: Optional[str] = Field(None, description="Main-plan input symbol whose value pre-fills this one.")
+    typical_value: Optional[float] = Field(None, description="Typical value (design convention or material property).")
+    typical_note: Optional[str] = Field(None, description="Source and usual range of the typical value.")
+
+
+class EstimateHelper(BaseModel):
+    title: str = Field(..., description="e.g. 'Estimate from belt width and thickness'.")
+    note: str = Field(..., description="What the estimate assumes and what to replace it with.")
+    inputs: List[EstimateInput] = Field(default_factory=list)
+    expression: str = Field(..., description="Formula using only the estimate's own input symbols.")
+
+
 class ProjectInput(BaseModel):
     symbol: str = Field(..., description="Identifier used in formulas, e.g. tau_s.")
     name: str = Field(..., description="Plain-English name, e.g. 'Material shear strength'.")
@@ -51,6 +67,7 @@ class ProjectInput(BaseModel):
     quote: Optional[str] = Field(None, description="The user's exact words for value.")
     typical_value: Optional[float] = Field(None, description="Typical value for material/catalogue properties only.")
     typical_note: Optional[str] = Field(None, description="Source and usual range of the typical value.")
+    estimate: Optional[EstimateHelper] = Field(None, description="Optional helper to estimate this value from easier inputs.")
 
 
 class Link(BaseModel):
@@ -120,6 +137,16 @@ def validate_project(plan: ProjectPlan) -> List[str]:
         if not _SYMBOL.match(i.symbol) or i.symbol in FUNCS or i.symbol in defined:
             problems.append(f"Invalid or duplicate input symbol '{i.symbol}'.")
         defined.add(i.symbol)
+        if i.estimate:
+            own = {e.symbol for e in i.estimate.inputs}
+            try:
+                tree = _parse(i.estimate.expression)
+                _check(tree)
+                unknown = sorted({n for n in _names(tree) if n not in own})
+                if unknown:
+                    problems.append(f"Estimate for '{i.name}' uses undefined symbol(s): {', '.join(unknown)}.")
+            except PlanError as e:
+                problems.append(f"Estimate for '{i.name}': {e}")
     if not plan.calculations:
         problems.append("The plan has no calculations.")
     for c in plan.calculations:
@@ -309,9 +336,25 @@ def _add_internet(result: CalcResult, args: Dict[str, float], db) -> None:
 # Built-in template: shredder (works without the AI)
 # ─────────────────────────────────────────────────────────────
 
-def _i(symbol, name, unit, source, optional=False, typical=None, note=None):
+def _i(symbol, name, unit, source, optional=False, typical=None, note=None, estimate=None):
     return ProjectInput(symbol=symbol, name=name, unit=unit, source_hint=source, optional=optional,
-                        typical_value=typical, typical_note=note)
+                        typical_value=typical, typical_note=note, estimate=estimate)
+
+
+def _e(symbol, name, unit, typical=None, note=None, from_input=None):
+    return EstimateInput(symbol=symbol, name=name, unit=unit, typical_value=typical, typical_note=note, from_input=from_input)
+
+
+# Allowable shaft shear stress from the ASME shaft code rule (used by the shredder template)
+ASME_SHEAR_ESTIMATE = EstimateHelper(
+    title="Estimate from the shaft steel's strength (ASME shaft code rule)",
+    note=("τ_allow = smaller of 0.3 × yield strength and 0.18 × tensile strength, reduced by 25 % where the shaft "
+          "has a keyway. Strengths come from the material certificate."),
+    inputs=[_e("Sy_e", "Yield strength of the shaft steel", "MPa"),
+            _e("Sut_e", "Tensile strength of the shaft steel", "MPa"),
+            _e("k_kw", "Keyway factor (1 = no keyway)", "", typical=0.75,
+               note="ASME shaft code: 0.75 (25 % reduction) where there is a keyway, 1.0 without.")],
+    expression="min(0.3 * Sy_e, 0.18 * Sut_e) * k_kw")
 
 
 def shredder_template(machine: str = "Shredding machine") -> ProjectPlan:
@@ -334,7 +377,8 @@ def shredder_template(machine: str = "Shredding machine") -> ProjectPlan:
                note="Heavy-shock row of the tool's service-factor table: 1.75 for 3–10 h/day, 2.0 for over 10 h/day."),
             _i("L", "Bearing span (distance between the two shaft bearings)", "mm", "Your shaft / frame design"),
             _i("tau_allow", "Allowable shear stress of the shaft steel", "MPa",
-               "Shaft material: e.g. 0.3 × yield strength (ASME shaft code), reduced by 25 % where there is a keyway"),
+               "Shaft material: e.g. 0.3 × yield strength (ASME shaft code), reduced by 25 % where there is a keyway",
+               estimate=ASME_SHEAR_ESTIMATE),
             _i("life_req", "Required bearing life", "h", "Your target service life (running hours)", optional=True),
             _i("C", "Bearing dynamic load rating (if a bearing is already chosen)", "kN", "Bearing catalogue", optional=True),
             _i("V", "Supply voltage (maximum)", "V", "Your power supply"),

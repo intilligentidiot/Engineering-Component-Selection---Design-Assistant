@@ -15,9 +15,9 @@
     const fmt = x => (x === null || x === undefined) ? "—"
         : Math.abs(x) >= 1e4 ? Math.round(x).toLocaleString() : String(Number(Number(x).toPrecision(4)));
 
-    let plan = null, values = {}, quotes = {}, typical = {};
+    let plan = null, values = {}, quotes = {}, typical = {}, estimated = {};   // estimated: symbol -> how it was estimated
 
-    function hide() { area.hidden = true; plan = null; values = {}; quotes = {}; typical = {}; }
+    function hide() { area.hidden = true; plan = null; values = {}; quotes = {}; typical = {}; estimated = {}; }
 
     async function show(data) {
         hide();
@@ -47,6 +47,7 @@
     function statusTag(i) {
         if (quotes[i.symbol] && values[i.symbol] !== "" && values[i.symbol] !== undefined) return `<span class="pj-tag have" title="From your text: “${esc(quotes[i.symbol])}”">✓ from your text</span>`;
         if (typical[i.symbol]) return `<span class="pj-tag sug" title="${esc(typical[i.symbol])}">suggested</span>`;
+        if (estimated[i.symbol]) return `<span class="pj-tag est" title="${esc(estimated[i.symbol])}">estimate</span>`;
         if (values[i.symbol] !== undefined && values[i.symbol] !== "") return `<span class="pj-tag have">✓ entered</span>`;
         return i.optional ? `<span class="pj-tag opt">optional</span>` : `<span class="pj-tag need">needed</span>`;
     }
@@ -55,10 +56,13 @@
         const have = plan.inputs.filter(i => values[i.symbol] !== undefined && values[i.symbol] !== "").length;
         info.innerHTML = `<p class="field-hint pj-count">You have <strong>${have}</strong> of <strong>${plan.inputs.length}</strong>. Fill in what you can — every calculation that has its information runs straight away.</p>` +
             plan.inputs.map(i => `
-            <div class="pj-row${typical[i.symbol] ? " suggested" : ""}" data-row="${i.symbol}">
+            <div class="pj-row${typical[i.symbol] ? " suggested" : ""}${estimated[i.symbol] ? " estimated" : ""}" data-row="${i.symbol}">
                 <div class="pj-name">${esc(i.name)} ${statusTag(i)}
-                    <div class="pj-src">${typical[i.symbol] ? "Suggested: " + esc(typical[i.symbol]) : "Where to get it: " + esc(i.source_hint)}</div></div>
+                    <div class="pj-src">${typical[i.symbol] ? "Suggested: " + esc(typical[i.symbol])
+                        : estimated[i.symbol] ? esc(estimated[i.symbol]) : "Where to get it: " + esc(i.source_hint)}</div>
+                    ${i.estimate && !quotes[i.symbol] ? `<button type="button" class="link-btn pj-est-btn" data-est="${i.symbol}">${estimated[i.symbol] ? "Change estimate" : "Don't have it? Estimate it"}</button>` : ""}</div>
                 <div class="input-row pj-input"><input type="number" step="any" data-pj="${i.symbol}" value="${esc(values[i.symbol] ?? "")}">${i.unit ? `<span class="unit-badge">${esc(i.unit)}</span>` : ""}</div>
+                <div class="pj-est" id="pj-est-${i.symbol}" hidden></div>
             </div>`).join("");
     }
 
@@ -66,14 +70,68 @@
         const k = e.target.dataset.pj;
         if (!k) return;
         values[k] = e.target.value;
-        delete quotes[k]; delete typical[k];
+        delete quotes[k]; delete typical[k]; delete estimated[k];
         const row = e.target.closest(".pj-row");
-        row.classList.remove("suggested");
+        row.classList.remove("suggested", "estimated");
         const i = plan.inputs.find(x => x.symbol === k);
         row.querySelector(".pj-tag").outerHTML = statusTag(i);
         row.querySelector(".pj-src").textContent = "Where to get it: " + i.source_hint;
     });
-    info.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); calcBtn.click(); } });
+    info.addEventListener("keydown", e => {
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        if (!e.target.dataset.estIn) calcBtn.click();
+    });
+
+    // ── Estimate helpers: work out a value from easier inputs (the tool does the maths) ──
+    info.addEventListener("click", async e => {
+        const open = e.target.closest("[data-est]");
+        if (open) { toggleEstimate(open.dataset.est); return; }
+        const use = e.target.closest("[data-est-use]");
+        if (use) await useEstimate(use.dataset.estUse);
+    });
+
+    function toggleEstimate(sym) {
+        const box = $(`pj-est-${sym}`);
+        if (!box.hidden) { box.hidden = true; return; }
+        const est = plan.inputs.find(i => i.symbol === sym).estimate;
+        box.innerHTML = `
+            <div class="pj-est-title">${esc(est.title)}</div>
+            <div class="field-hint">${esc(est.note)}</div>
+            <div class="pj-est-grid">${est.inputs.map(x => {
+                const pre = x.from_input && values[x.from_input] !== undefined && values[x.from_input] !== "" ? values[x.from_input]
+                          : (x.typical_value ?? "");
+                return `<div class="field-group">
+                    <label>${esc(x.name)}${x.typical_value != null ? ' <span class="opt-tag">suggested</span>' : ""}</label>
+                    <div class="input-row"><input type="number" step="any" data-est-in="${sym}" data-k="${x.symbol}" value="${esc(pre)}">${x.unit ? `<span class="unit-badge">${esc(x.unit)}</span>` : ""}</div>
+                    ${x.typical_note ? `<p class="field-hint sug-hint">${esc(x.typical_note)}</p>` : ""}
+                </div>`; }).join("")}</div>
+            <div class="sz-ai-actions"><button type="button" class="btn-secondary" data-est-use="${sym}">Use this estimate</button>
+                <span class="field-hint pj-est-msg" id="pj-est-msg-${sym}"></span></div>`;
+        box.hidden = false;
+    }
+
+    async function useEstimate(sym) {
+        const inp = plan.inputs.find(i => i.symbol === sym), est = inp.estimate;
+        const vals = {};
+        info.querySelectorAll(`[data-est-in="${sym}"]`).forEach(el => { vals[el.dataset.k] = el.value === "" ? null : Number(el.value); });
+        const method = { title: est.title, summary: est.note,
+            inputs: est.inputs.map(x => ({ symbol: x.symbol, name: x.name, unit: x.unit })),
+            steps: [{ symbol: sym, name: inp.name, unit: inp.unit, expression: est.expression }],
+            result_symbols: [sym] };
+        const msg = $(`pj-est-msg-${sym}`);
+        try {
+            const res = await fetch(`${API}/api/evaluate-method`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ plan: method, values: vals }) });
+            const r = await res.json();
+            if (r.status === "REQUIREMENTS_INCOMPLETE") { msg.textContent = "Fill in: " + r.missing_inputs.map(m => m.label).join(", "); return; }
+            if (r.status !== "CALCULATED") { msg.textContent = (r.errors || ["Could not calculate the estimate."]).join(" "); return; }
+            const step = r.steps[0];
+            values[sym] = Number(step.result.toPrecision(4));
+            delete quotes[sym]; delete typical[sym];
+            estimated[sym] = `Estimate — replace with the datasheet value. ${step.substitution}`;
+            await evaluate();
+        } catch (err) { msg.textContent = err.message || "Could not reach the server."; }
+    }
 
     // ── 2. Calculations ──────────────────────────────────────
     async function evaluate() {
