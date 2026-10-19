@@ -7,7 +7,16 @@
     <meta name="description" content="Engineering Calculation Assistant by Tesla Mechanical Designs: plain-language engineering questions and machine projects turned into checked calculations with full working, including motor and gearbox selection.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/style.css?v=9.5">
+    <link rel="stylesheet" href="/static/css/style.css?v=9.7">
+    <link rel="stylesheet" href="/static/css/theme.css?v=1.2">
+    <script>
+        // Apply the saved theme before the page draws (light by default)
+        (function () {
+            var t = "light";
+            try { t = localStorage.getItem("tmd.theme") || "light"; } catch (e) {}
+            document.documentElement.setAttribute("data-theme", t === "dark" ? "dark" : "light");
+        })();
+    </script>
 </head>
 <body>
 
@@ -21,6 +30,7 @@
                     <span class="logo-secondary">Engineering Calculation Assistant</span>
                 </div>
             </div>
+            <button type="button" class="theme-toggle" id="theme-toggle" title="Switch between light and dark">Dark mode</button>
             <label class="units-pick">Units
                 <select id="units-preset" title="Units used to show results"></select>
             </label>
@@ -48,6 +58,14 @@
 
     <!-- Main Content -->
     <main class="main-content">
+
+        <!-- Printed report header (only visible when printing) -->
+        <div class="report-head" id="report-head">
+            <div class="rh-brand">Tesla Mechanical Designs · Engineering Calculation Assistant</div>
+            <h1 id="rh-title">Calculation report</h1>
+            <div class="rh-meta" id="rh-meta"></div>
+            <div class="rh-question" id="rh-question"></div>
+        </div>
 
         <!-- ══════════════════════════════════════════
              TAB 1 — COMPONENT SELECTION
@@ -160,6 +178,7 @@
                     <label class="check-label sz-internet"><input type="checkbox" id="pj-internet"> Also search the internet for matching motors + gearboxes</label>
                     <div class="form-actions">
                         <button type="button" class="btn-primary" id="pj-calc">Calculate the project</button>
+                        <button type="button" class="btn-secondary" data-print-report="project">Print / Save as PDF</button>
                         <button type="button" class="btn-secondary" id="pj-reset">Start over</button>
                     </div>
                     <h3 class="sz-step" id="pj-calcs-head"><span>2</span> Calculations, in order <span class="pj-progress" id="pj-progress"></span></h3>
@@ -169,18 +188,24 @@
             </section>
 
             <section class="panel" id="as-result-panel" hidden>
-                <div class="panel-header">
-                    <h2 id="as-result-title">Result</h2>
-                    <p id="as-result-sub"></p>
+                <div class="panel-header panel-header-actions">
+                    <div>
+                        <h2 id="as-result-title">Result</h2>
+                        <p id="as-result-sub"></p>
+                    </div>
+                    <button type="button" class="btn-secondary" data-print-report="assistant">Print / Save as PDF</button>
                 </div>
                 <div id="as-result"></div>
             </section>
 
             <!-- Calculation proof -->
             <section class="panel" id="sz-proof-panel" hidden>
-                <div class="panel-header">
-                    <h2 id="sz-proof-title">How the requirement was calculated</h2>
-                    <p id="sz-proof-sub"></p>
+                <div class="panel-header panel-header-actions">
+                    <div>
+                        <h2 id="sz-proof-title">How the requirement was calculated</h2>
+                        <p id="sz-proof-sub"></p>
+                    </div>
+                    <button type="button" class="btn-secondary" data-print-report="sizing">Print / Save as PDF</button>
                 </div>
                 <div id="sz-proof"></div>
             </section>
@@ -328,15 +353,23 @@
 
     </main>
 
+    <div class="report-foot" id="report-foot">
+        Calculated by the Engineering Calculation Assistant (Tesla Mechanical Designs). Every result was calculated by the
+        tool from the inputs shown. Values marked <em>suggested</em> or <em>estimate</em> are typical values to be confirmed;
+        results marked "Method chosen by AI" must be checked by an engineer. Built-in methods and default values are pending
+        engineering approval.
+    </div>
+
     <footer class="site-footer">
         <p>Tesla Mechanical Designs &copy; 2026 &mdash; Engineering Calculation Assistant &mdash;
            every number is calculated by the tool and shown step by step</p>
     </footer>
 
-    <script src="/static/js/units.js?v=9.5"></script>
-    <script src="/static/js/main.js?v=9.5"></script>
-    <script src="/static/js/sizing.js?v=9.5"></script>
-    <script src="/static/js/assistant.js?v=9.5"></script>
-    <script src="/static/js/project.js?v=9.5"></script>
+    <script src="/static/js/units.js?v=9.7"></script>
+    <script src="/static/js/main.js?v=9.7"></script>
+    <script src="/static/js/sizing.js?v=9.7"></script>
+    <script src="/static/js/assistant.js?v=9.7"></script>
+    <script src="/static/js/project.js?v=9.7"></script>
+    <script src="/static/js/report.js?v=1.0"></script>
 </body>
 </html>

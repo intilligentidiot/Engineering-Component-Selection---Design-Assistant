@@ -15,6 +15,22 @@ const errorPanel  = document.getElementById("error-panel");
 const errorTitle  = document.getElementById("error-title");
 const errorMsg    = document.getElementById("error-message");
 
+// ── Light / dark theme switch (choice remembered in this browser) ──
+const themeBtn = document.getElementById("theme-toggle");
+function syncThemeButton() {
+    const dark = document.documentElement.getAttribute("data-theme") === "dark";
+    if (themeBtn) themeBtn.textContent = dark ? "Light mode" : "Dark mode";
+}
+if (themeBtn) {
+    themeBtn.addEventListener("click", () => {
+        const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+        document.documentElement.setAttribute("data-theme", next);
+        try { localStorage.setItem("tmd.theme", next); } catch { /* storage unavailable */ }
+        syncThemeButton();
+    });
+}
+syncThemeButton();
+
 // ── Health check ────────────────────────────────────────────
 async function checkHealth() {
     try {
@@ -158,7 +174,7 @@ function peakTraceHtml(pt, n) {
     if (!pt) return "";
     return `
         <div style="margin-top:0.5rem"><strong>${n ? n + ". " : ""}Peak Torque (acceleration):</strong></div>
-        <div style="color:var(--silver-300)">${pt.formula}</div>
+        <div style="color:var(--silver-200)">${pt.formula}</div>
         ${pt.substitution ? `<div style="color:var(--silver-400)">Basis: ${pt.substitution}</div>` : ""}
         <div>Comparison: ${pt.comparison} &nbsp;<span class="data-status ${pt.status}">${pt.status.replace(/_/g," ")}</span></div>`;
 }
@@ -187,7 +203,7 @@ function renderResults(data) {
     // SECTION A: Source A Verified Local Database
     const secA = document.createElement("div");
     secA.className = "source-section";
-    secA.innerHTML = `<h3 class="source-title" style="color:var(--accent-green); margin:1.5rem 0 1rem 0; display:flex; align-items:center; gap:0.5rem">
+    secA.innerHTML = `<h3 class="source-title" style="color:var(--green-400); margin:1.5rem 0 1rem 0; display:flex; align-items:center; gap:0.5rem">
         <span>●</span> SOURCE A — Verified Local Database (${data.count} candidates)
     </h3>`;
 
@@ -270,22 +286,22 @@ function renderResults(data) {
             </div>
             <div class="detail-section" style="grid-column: span 2">
                 <h5>📐 Candidate-Specific Calculation Trace (Engineering Proof)</h5>
-                <div style="font-size:0.82rem; font-family:'JetBrains Mono', monospace; background:rgba(0,0,0,0.3); padding:0.75rem; border-radius:6px; border:1px solid var(--border-color); line-height:1.6">
+                <div style="font-size:0.82rem; font-family:'JetBrains Mono', monospace; background:var(--dark-700); padding:0.75rem; border-radius:6px; border:1px solid var(--border-color); line-height:1.6">
                     <div><strong>1. Design Torque Requirement:</strong></div>
-                    <div style="color:var(--silver-300)">${trace.design_torque?.formula || "T_design = T_required × SF"}</div>
+                    <div style="color:var(--silver-200)">${trace.design_torque?.formula || "T_design = T_required × SF"}</div>
                     <div style="color:var(--silver-400)">${trace.design_torque?.comparison || ""}</div>
                     
                     <div style="margin-top:0.5rem"><strong>2. Required Mechanical Output Power:</strong></div>
-                    <div style="color:var(--silver-300)">${trace.required_power?.formula || "P = T × RPM / 9550"}</div>
+                    <div style="color:var(--silver-200)">${trace.required_power?.formula || "P = T × RPM / 9550"}</div>
                     <div style="color:var(--silver-400)">${trace.required_power?.substitution || ""} ⇒ ${trace.required_power?.comparison || ""}</div>
                     
                     <div style="margin-top:0.5rem"><strong>3. Gearbox Output Torque:</strong></div>
-                    <div style="color:var(--silver-300)">${trace.gearbox_output_torque?.formula || "T_out = T_motor × Ratio × Efficiency"}</div>
+                    <div style="color:var(--silver-200)">${trace.gearbox_output_torque?.formula || "T_out = T_motor × Ratio × Efficiency"}</div>
                     <div style="color:var(--silver-400)">Substitution: ${trace.gearbox_output_torque?.substitution || ""}</div>
                     <div>Comparison: ${trace.gearbox_output_torque?.comparison || ""} &nbsp;<span class="data-status ${trace.gearbox_output_torque?.status || "MEETS"}">${trace.gearbox_output_torque?.status || "MEETS"}</span></div>
                     
                     <div style="margin-top:0.5rem"><strong>4. Final Output Speed:</strong></div>
-                    <div style="color:var(--silver-300)">${trace.output_speed?.formula || "Output Speed = Motor RPM / Ratio"}</div>
+                    <div style="color:var(--silver-200)">${trace.output_speed?.formula || "Output Speed = Motor RPM / Ratio"}</div>
                     <div style="color:var(--silver-400)">Substitution: ${trace.output_speed?.substitution || ""}</div>
                     <div>Comparison: ${trace.output_speed?.comparison || ""} &nbsp;<span class="data-status ${trace.output_speed?.status || "MEETS"}">${trace.output_speed?.status || "MEETS"}</span></div>
                     ${peakTraceHtml(trace.peak_torque, 5)}
@@ -312,9 +328,9 @@ function renderResults(data) {
 
         let sourceTagHtml = "";
         if (isCached) {
-            sourceTagHtml = `<span style="display:inline-flex;align-items:center;gap:0.35rem;font-size:0.72rem;font-weight:600;color:#f0b429;background:rgba(240,180,41,0.12);border:1px solid rgba(240,180,41,0.35);padding:0.18rem 0.55rem;border-radius:999px;vertical-align:middle">&#128190; Cached${cacheDateLabel ? " &middot; " + cacheDateLabel : ""}</span>`;
+            sourceTagHtml = `<span style="display:inline-flex;align-items:center;gap:0.35rem;font-size:0.72rem;font-weight:600;color:var(--amber-400);background:rgba(240,180,41,0.12);border:1px solid rgba(240,180,41,0.35);padding:0.18rem 0.55rem;border-radius:999px;vertical-align:middle">&#128190; Cached${cacheDateLabel ? " &middot; " + cacheDateLabel : ""}</span>`;
         } else if (isLive) {
-            sourceTagHtml = `<span style="display:inline-flex;align-items:center;gap:0.35rem;font-size:0.72rem;font-weight:600;color:#4ae3b5;background:rgba(74,227,181,0.1);border:1px solid rgba(74,227,181,0.3);padding:0.18rem 0.55rem;border-radius:999px;vertical-align:middle">&#127757; Live Search</span>`;
+            sourceTagHtml = `<span style="display:inline-flex;align-items:center;gap:0.35rem;font-size:0.72rem;font-weight:600;color:var(--green-400);background:rgba(74,227,181,0.1);border:1px solid rgba(74,227,181,0.3);padding:0.18rem 0.55rem;border-radius:999px;vertical-align:middle">&#127757; Live Search</span>`;
         } else if (isMock) {
             sourceTagHtml = `<span style="display:inline-flex;align-items:center;gap:0.35rem;font-size:0.72rem;font-weight:600;color:var(--silver-400);background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);padding:0.18rem 0.55rem;border-radius:999px;vertical-align:middle">&#129302; Mock Provider</span>`;
         }
@@ -322,7 +338,7 @@ function renderResults(data) {
         const secB = document.createElement("div");
         secB.className = "source-section";
         secB.style.marginTop = "2.5rem";
-        secB.innerHTML = `<h3 class="source-title" style="color:var(--accent-blue); margin:1.5rem 0 1rem 0; display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap">
+        secB.innerHTML = `<h3 class="source-title" style="color:var(--blue-400); margin:1.5rem 0 1rem 0; display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap">
             <span>&#127760;</span> SOURCE B — Internet Discovered Components (${data.internet_results.length} candidates)
             ${sourceTagHtml}
             <span style="font-weight:400; font-size:0.8rem; color:var(--silver-400)">(External discovery feed — evaluated by deterministic calculation engine)</span>
@@ -350,7 +366,7 @@ function renderResults(data) {
                 : `<span style="font-size:0.75rem; color:var(--silver-400); display:inline-block; padding:0.25rem 0.5rem; background:rgba(255,255,255,0.05); border-radius:4px">Webpage not found</span>`;
 
             const cadHtml = rec.cad?.available
-                ? `<span style="font-size:0.75rem; color:var(--accent-green); font-weight:600">📐 CAD Available</span>`
+                ? `<span style="font-size:0.75rem; color:var(--green-400); font-weight:600">📐 CAD Available</span>`
                 : `<span style="font-size:0.75rem; color:var(--silver-400)">CAD Not Confirmed</span>`;
 
             const priceHtml = rec.price?.amount
@@ -361,7 +377,7 @@ function renderResults(data) {
 
             card.innerHTML = `
             <div class="result-card-header" id="card-hdr-b-${i}">
-                <div class="rank-number" style="background:var(--accent-blue)">B${i + 1}</div>
+                <div class="rank-number" style="background:var(--blue-400)">B${i + 1}</div>
 
                 <div class="comp-summary" style="flex:1.5">
                     ${imgHtml}
@@ -399,12 +415,12 @@ function renderResults(data) {
                         <tr><td>CAD Model</td><td>${cadHtml}</td></tr>
                         <tr><td>Discovered At</td><td>${rec.verification.discovered_at}</td></tr>
                         ${rec.specification_source ? `<tr><td>Spec Source</td><td>${rec.specification_source}</td></tr>` : ''}
-                        ${rec.specification_source_url ? `<tr><td>Spec URL</td><td><a href="${rec.specification_source_url}" target="_blank" style="color:var(--accent-blue)">View Source</a></td></tr>` : ''}
+                        ${rec.specification_source_url ? `<tr><td>Spec URL</td><td><a href="${rec.specification_source_url}" target="_blank" style="color:var(--blue-400)">View Source</a></td></tr>` : ''}
                         ${rec.extracted_at ? `<tr><td>Extracted At</td><td>${new Date(rec.extracted_at).toLocaleString()}</td></tr>` : ''}
                         <tr><td>Data Source</td><td>${
                             rec.cache_hit
-                            ? `<span style="color:#f0b429;font-weight:600">&#128190; Cached &middot; ${rec.cache_source ? new Date(rec.cache_source).toLocaleString() : '—'}</span>`
-                            : `<span style="color:#4ae3b5;font-weight:600">&#127757; Live Search</span>`
+                            ? `<span style="color:var(--amber-400);font-weight:600">&#128190; Cached &middot; ${rec.cache_source ? new Date(rec.cache_source).toLocaleString() : '—'}</span>`
+                            : `<span style="color:var(--green-400);font-weight:600">&#127757; Live Search</span>`
                         }</td></tr>
                     </table>
                     <div style="margin-top:0.75rem; display:flex; gap:0.5rem; flex-wrap:wrap">
@@ -415,7 +431,7 @@ function renderResults(data) {
 
                 <div class="detail-section" style="grid-column: span 2">
                     <h5>📐 Candidate Engineering Calculation Proof</h5>
-                    <div style="font-size:0.82rem; font-family:'JetBrains Mono', monospace; background:rgba(0,0,0,0.3); padding:0.75rem; border-radius:6px; border:1px solid var(--border-color); line-height:1.6">
+                    <div style="font-size:0.82rem; font-family:'JetBrains Mono', monospace; background:var(--dark-700); padding:0.75rem; border-radius:6px; border:1px solid var(--border-color); line-height:1.6">
                         ${trace.gearbox_output_torque ? `
                             <div><strong>Output Torque Check:</strong> ${trace.gearbox_output_torque.formula}</div>
                             <div style="color:var(--silver-400)">Substitution: ${trace.gearbox_output_torque.substitution}</div>

@@ -1,0 +1,183 @@
+/* ===================================================
+   Engineering Calculation Assistant — theme layer
+   Loaded after style.css. Two themes on <html data-theme="light|dark">:
+   light (default) and dark. Calm engineering blue for actions; the brand
+   red stays on the logo mark only; red otherwise means a real problem.
+   =================================================== */
+
+:root {
+    --primary: #1f5fbf;
+    --primary-hover: #184e9e;
+    --primary-soft: rgba(31, 95, 191, 0.10);
+    --primary-ring: rgba(31, 95, 191, 0.22);
+    --brand: #c8102e;
+    --header-bg: linear-gradient(135deg, #0d1b2e, #15294a);
+    --header-line: #22385e;
+    --shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.08);
+    --suggest: #6b46c1;
+    --suggest-soft: rgba(107, 70, 193, 0.08);
+    --suggest-line: rgba(107, 70, 193, 0.45);
+}
+
+/* ── Light theme: the existing colour names re-pointed at light values ── */
+:root[data-theme="light"] {
+    --dark-950: #f3f5f8;   /* page */
+    --dark-900: #ffffff;   /* tab bar */
+    --dark-800: #ffffff;   /* panels */
+    --dark-700: #f7f9fb;   /* inputs, cards */
+    --dark-600: #e2e7ee;   /* borders */
+    --dark-500: #c9d1dc;   /* stronger borders */
+    --silver-100: #16202c; /* main text */
+    --silver-200: #2a3644;
+    --silver-400: #566376;
+    --silver-600: #7b8696;
+    --green-400: #1d7a3a;
+    --green-dim: rgba(29, 122, 58, 0.10);
+    --amber-400: #9a5b00;
+    --blue-400: #1f5fbf;
+    --blue-dim: rgba(31, 95, 191, 0.09);
+    --red-500: #c62828;
+    --red-glow: rgba(198, 40, 40, 0.18);
+    --suggest: #6b46c1;
+    color-scheme: light;
+}
+:root[data-theme="dark"] {
+    --primary: #4f8be6;
+    --primary-hover: #6a9ef0;
+    --primary-soft: rgba(79, 139, 230, 0.14);
+    --primary-ring: rgba(79, 139, 230, 0.28);
+    --shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+    --suggest: #b39ddb;
+    --suggest-soft: rgba(179, 157, 219, 0.10);
+    --suggest-line: rgba(179, 157, 219, 0.45);
+    color-scheme: dark;
+}
+
+/* ── Header: calm navy, brand red only on the logo mark ── */
+.site-header { background: var(--header-bg); border-bottom: 1px solid var(--header-line); box-shadow: 0 1px 0 rgba(0,0,0,0.15); }
+.logo-mark { background: var(--brand); border-color: var(--brand); }
+.logo-secondary { color: rgba(255, 255, 255, 0.72); }
+
+/* ── Actions and focus in engineering blue ── */
+.btn-primary { background: var(--primary); box-shadow: none; }
+.btn-primary:hover { background: var(--primary-hover); box-shadow: 0 2px 8px var(--primary-ring); }
+.btn-secondary:hover, .btn-secondary.active-filter { color: var(--silver-100); border-color: var(--primary); background: var(--primary-soft); }
+.tab-btn.active { border-bottom-color: var(--primary); }
+.input-row:focus-within, .filter-select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-ring); }
+.sz-step > span:first-child { background: var(--primary); }
+.rank-number.top { background: var(--primary); box-shadow: none; }
+.result-card:hover { border-color: var(--primary); }
+.eff-bar-fill { background: var(--primary); }
+.link-btn { color: var(--primary); }
+.sz-ai-box textarea:focus { border-color: var(--primary); }
+
+/* Key numbers: the main answer stands out without looking like an error */
+.sz-req.key { border-color: var(--primary); background: var(--primary-soft); }
+.sz-req-grid.main .sz-req-val { font-size: 1.75rem; }
+.pj-asked .pj-res { font-size: 0.92rem; }
+.pj-asked .pj-res strong { font-size: 1rem; }
+
+/* Panels: soft shadow, no heavy glow */
+.panel { box-shadow: var(--shadow); }
+.result-card { box-shadow: none; }
+
+/* Suggested (typical) values — purple that reads on both themes */
+.field-group.suggested .input-row, .pj-row.suggested .input-row { border-color: var(--suggest-line); box-shadow: 0 0 0 3px var(--suggest-soft); }
+.sug-hint, .pj-row.suggested .pj-src, .sz-sug-head strong { color: var(--suggest); }
+.sz-sug-head { background: var(--suggest-soft); border-color: var(--suggest-line); }
+.pj-tag.sug { background: var(--suggest-soft); color: var(--suggest); }
+
+/* Bigger, readable unit selectors */
+select.u-sel { font-size: 0.85rem; padding: 0.1rem 0.25rem; border-color: var(--dark-600); color: var(--silver-400); }
+.sz-req-val select.u-sel { font-size: 0.8rem; }
+
+/* Light theme fine-tuning */
+:root[data-theme="light"] .tab-nav { background: #ffffff; border-bottom-color: var(--dark-600); }
+:root[data-theme="light"] .tab-btn { color: var(--silver-400); }
+:root[data-theme="light"] .tab-btn.active, :root[data-theme="light"] .tab-btn:hover { color: var(--silver-100); }
+:root[data-theme="light"] .unit-badge { background: #eef1f5; color: var(--silver-400); }
+:root[data-theme="light"] .sz-note.warn { background: #fff8e6; border-color: #f0d38a; }
+:root[data-theme="light"] .sz-note.danger { background: #fdecec; border-color: #f2b8b5; }
+:root[data-theme="light"] .sz-note.info { background: #eef4fd; border-color: #bcd2f3; }
+:root[data-theme="light"] .sz-note.ai-method { background: #fff8e6; border-color: #e8c66a; }
+:root[data-theme="light"] .sz-stepline { background: #f7f9fb; }
+:root[data-theme="light"] .site-footer { color: var(--silver-600); border-top-color: var(--dark-600); }
+:root[data-theme="light"] .data-status.DISCOVERED { color: #8a5300; }
+:root[data-theme="light"] select.u-sel option, :root[data-theme="light"] .input-row select option { background: #fff; color: var(--silver-100); }
+:root[data-theme="light"] .pj-card { background: #ffffff; }
+:root[data-theme="light"] .pj-card.done .pj-n { background: var(--green-400); color: #fff; }
+
+/* ── Theme switch in the header ── */
+.theme-toggle {
+    background: rgba(255, 255, 255, 0.08); color: #fff; border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: var(--radius-sm); padding: 0.3rem 0.6rem; font-family: var(--font); font-size: 0.78rem; cursor: pointer;
+    margin-right: 0.75rem; white-space: nowrap;
+}
+.theme-toggle:hover { background: rgba(255, 255, 255, 0.16); }
+.units-pick { margin-right: 0.75rem; }
+
+/* ── Result panel headers with a Print button ── */
+.panel-header-actions { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
+.panel-header-actions .btn-secondary { white-space: nowrap; }
+
+/* ── Printed report (screen: hidden) ── */
+.report-head, .report-foot { display: none; }
+
+@media print {
+    @page { size: A4; margin: 14mm 12mm; }
+
+    /* Always print light, whatever theme is on screen */
+    :root, :root[data-theme="dark"], :root[data-theme="light"] {
+        --dark-950: #ffffff; --dark-900: #ffffff; --dark-800: #ffffff; --dark-700: #f6f7f9;
+        --dark-600: #d9dee5; --dark-500: #c4cbd4;
+        --silver-100: #111820; --silver-200: #222c38; --silver-400: #4a5563; --silver-600: #6b7480;
+        --green-400: #1d6b33; --amber-400: #8a5300; --blue-400: #1f5fbf; --red-500: #b42318;
+        --primary: #1f5fbf; --suggest: #5b3aa8; --suggest-line: #b9a6e3; --suggest-soft: #f4f0fb;
+    }
+    html, body { background: #fff !important; color: #111820; font-size: 10.5pt; }
+    * { animation: none !important; transition: none !important; box-shadow: none !important; }
+
+    /* Screen-only parts */
+    .site-header, .tab-nav, .site-footer, .form-actions, #sizing-form, #as-area, .sz-ai-box,
+    .pj-est-btn, .pj-est, .sz-internet, .expand-btn, .panel-header-actions .btn-secondary,
+    button, .link-btn, #pj-reset, .source-badge-row { display: none !important; }
+    .main-content { max-width: none; margin: 0; padding: 0; }
+    .panel { border: none; padding: 0; margin: 0 0 6mm; background: #fff; }
+    .tab-content { display: block !important; }
+    .tab-content:not(.active) { display: none !important; }
+
+    /* Show only the result that was printed */
+    body[data-print="project"] #sz-proof-panel, body[data-print="project"] #as-result-panel,
+    body[data-print="project"] #shared-results { display: none !important; }
+    body[data-print="sizing"] .input-panel, body[data-print="sizing"] #as-result-panel { display: none !important; }
+    body[data-print="assistant"] .input-panel, body[data-print="assistant"] #sz-proof-panel,
+    body[data-print="assistant"] #shared-results { display: none !important; }
+    body[data-print="project"] .input-panel > .panel-header { display: none; }
+    body[data-print="project"] .pj-title { display: none; }   /* already the report title */
+
+    /* Report header and closing note */
+    .report-head { display: block; border-bottom: 2px solid #1f5fbf; padding-bottom: 4mm; margin-bottom: 6mm; }
+    .rh-brand { font-size: 9pt; color: #4a5563; letter-spacing: 0.04em; text-transform: uppercase; }
+    .report-head h1 { font-size: 17pt; margin: 2mm 0 1.5mm; color: #111820; }
+    .rh-meta { font-size: 9.5pt; color: #4a5563; }
+    .rh-label { font-size: 8.5pt; font-weight: 700; color: #4a5563; text-transform: uppercase; margin-top: 3mm; }
+    .rh-qtext { white-space: pre-wrap; font-size: 9.5pt; border-left: 3px solid #d9dee5; padding-left: 3mm; margin-top: 1mm; }
+    .report-foot { display: block; font-size: 8.5pt; color: #4a5563; border-top: 1px solid #d9dee5; padding-top: 3mm; margin-top: 6mm; }
+
+    /* Readable cards, no page breaks inside a calculation step */
+    .pj-card, .sz-stepline, .result-card, .sz-note, .pj-asked, .sz-req, .pj-row, tr { break-inside: avoid; page-break-inside: avoid; }
+    .pj-card { border: 1px solid #d9dee5; background: #fff; }
+    .sz-stepline { background: #f6f7f9; }
+    details > summary { list-style: none; font-weight: 700; }
+    details > summary::-webkit-details-marker { display: none; }
+    .u-note { display: none; }
+
+    /* Inputs and unit selectors print as plain text */
+    select, select.u-sel { appearance: none; -webkit-appearance: none; border: none !important; background: none !important;
+                           padding: 0 !important; color: #4a5563 !important; font-size: 9pt !important; max-width: none !important; }
+    .input-row { border: 1px solid #d9dee5 !important; }
+    .input-row input { background: #fff !important; color: #111820 !important; }
+    .pj-row { grid-template-columns: 1fr 330px; }
+    .result-card-detail { display: grid !important; }
+    a { color: #1f5fbf; text-decoration: none; }
+}
