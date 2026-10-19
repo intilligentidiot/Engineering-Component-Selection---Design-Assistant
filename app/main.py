@@ -23,7 +23,7 @@ from app.database.database import engine, Base
 # Create tables
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="Tesla Motor & Gearbox Selection Tool")
+app = FastAPI(title="Tesla Mechanical Designs — Engineering Calculation Assistant")
 
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")

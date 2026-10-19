@@ -161,7 +161,10 @@ def test_serpapi_search_provider_mocked(monkeypatch):
     raw = provider.search("24V industrial DC motor gearbox 1.0 Nm 35 RPM", limit=5)
 
     assert len(raw) == 1
-    assert raw[0]["manufacturer"] == "Maxongroup"
+    # The display link is not a maker name: the readable name comes from the product URL
+    from app.engine.discover import clean_manufacturer
+    assert raw[0]["manufacturer"] is None
+    assert clean_manufacturer(raw[0]) == "maxongroup.com"
     assert raw[0]["product_name"] == "Maxon DC Motor 24V 150 Nm 60 RPM"
     assert raw[0]["product_url"] == "https://www.maxongroup.com/maxon/view/product/motor123"
 
@@ -218,3 +221,63 @@ def test_no_fabricated_urls(db_session):
     assert cleaned_ds is None
 
 
+
+
+# ── Real-search fixes (live SerpApi results reviewed 2026-10-19) ──
+
+from app.engine.discover import clean_manufacturer, is_non_product_page, is_relevant_product_result
+
+
+def test_manufacturer_from_link_not_display_text():
+    assert clean_manufacturer({"manufacturer": "Https://www", "product_url":
+        "https://www.omc-stepperonline.com/24v-60w-58-9rpm-geared-brushless-dc-motor"}) == "omc-stepperonline.com"
+    assert clean_manufacturer({"manufacturer": None, "product_url":
+        "https://www.amazon.com/Makermotor-Shaft-Reversible-Electric-Motor/dp/B084KY41Q1"}) == "Maker not stated (sold on amazon.com)"
+    assert clean_manufacturer({"manufacturer": "Nanotec", "product_url": "https://www.nanotec.com/x"}) == "Nanotec"
+
+
+@pytest.mark.parametrize("raw", [
+    {"product_name": "24V DC Gear Motor with High Torque and Low RPM", "manufacturer": "17K+ views · 4 years ago",
+     "product_url": "https://www.youtube.com/watch?v=Up1KFcZ8H08"},
+    {"product_name": "25+ DC 24V Industrial Electric Gearmotors for sale",
+     "product_url": "https://www.ebay.com/b/DC-24V-Industrial-Electric-Gearmotors/65452/bn_73765955"},
+    {"product_name": "24V DC Motor with Gearbox for High Torque",
+     "product_url": "https://www.zwgearbox.com/blog/24v-dc-motor-gearbox-high-torque"},
+])
+def test_non_product_pages_are_rejected(raw):
+    assert is_non_product_page(raw)
+    assert not is_relevant_product_result(raw)
+
+
+def test_product_page_still_accepted():
+    raw = {"product_name": "24V 60W 58.9RPM Geared Brushless DC Motor 7.00Nm",
+           "product_url": "https://www.omc-stepperonline.com/24v-60w-58-9rpm-geared-brushless-dc-motor"}
+    assert not is_non_product_page(raw)
+    assert is_relevant_product_result(raw)
+
+
+class GearmotorListingProvider(SearchProvider):
+    """A complete gearmotor that states its OUTPUT speed and torque, no ratio or efficiency."""
+    def search(self, query, limit=10):
+        return [{"manufacturer": None, "product_name": "24V 60W 58.9RPM Geared Brushless DC Motor 7.00Nm Planetary Gearbox",
+                 "part_number": "M52B60-G52-50", "product_url": "https://www.omc-stepperonline.com/m52b60-g52",
+                 "voltage_v": 24.0, "power_w": 60.0, "nominal_speed_rpm": 58.9, "nominal_torque_nm": 7.0,
+                 "gear_ratio": None, "efficiency": None, "max_output_torque_nm": None, "source": "test"}]
+
+
+def test_complete_gearmotor_judged_on_listed_output(db_session):
+    results = discover_and_evaluate_components(
+        db=db_session, required_speed_rpm=50.0, required_torque_nm=2.0, service_factor=1.5,
+        max_voltage_v=24.0, provider=GearmotorListingProvider(), top_n=5)
+    r = next(x for x in results if x["part_number"] == "M52B60-G52-50")
+    assert r["engineering_status"] == "MEETS"                 # 7 N·m ≥ 3 N·m at 58.9 rpm (within +50 %)
+    assert r["rating_basis"] == "OUTPUT_AS_LISTED"
+    assert "as listed" in r["calculation_trace"]["gearbox_output_torque"]["formula"]
+    assert r["manufacturer"] == "omc-stepperonline.com"
+
+
+def test_gearmotor_too_weak_is_not_meets(db_session):
+    results = discover_and_evaluate_components(
+        db=db_session, required_speed_rpm=50.0, required_torque_nm=6.0, service_factor=1.5,
+        max_voltage_v=24.0, provider=GearmotorListingProvider(), top_n=5)
+    assert not any(x["part_number"] == "M52B60-G52-50" and x["engineering_status"] == "MEETS" for x in results)

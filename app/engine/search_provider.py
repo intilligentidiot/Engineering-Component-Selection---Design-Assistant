@@ -52,7 +52,9 @@ class SerpApiSearchProvider(SearchProvider):
                 is_pdf = raw_link and raw_link.lower().split("?")[0].endswith(".pdf")
 
                 items.append({
-                    "manufacturer": source_domain.split(".")[0].capitalize() if "." in source_domain else source_domain,
+                    # The display link is not a maker name; discover.clean_manufacturer() derives it from the URL
+                    "manufacturer": None,
+                    "snippet": snippet,
                     "product_name": title,
                     "model": None,
                     "part_number": None,

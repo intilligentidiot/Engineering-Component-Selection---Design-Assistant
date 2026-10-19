@@ -1,4 +1,4 @@
-# Project Status
+# Project Status — Engineering Calculation Assistant
 
 ## Current Stage: Stage 8 (Application-Based Sizing) — IMPLEMENTED, defaults awaiting engineering sign-off
 

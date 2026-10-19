@@ -1,7 +1,8 @@
 # ARCHITECTURE.md — Dual-Source Component Data Contract
 
 This document defines the architectural contract between the two data sources
-in the Tesla Mechanical Designs Motor & Gearbox Selection Tool.
+used by the motor + gearbox selection step of the Tesla Mechanical Designs
+Engineering Calculation Assistant.
 
 It must be read before implementing the internet discovery module (Source B).
 

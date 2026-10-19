@@ -225,6 +225,58 @@ _REJECTION_PHRASES: List[str] = [
 ]
 
 
+# Pages that are never a product: videos, social media, forums, blogs, category / search listings
+_NON_PRODUCT_HOSTS = ("youtube.com", "youtu.be", "facebook.com", "instagram.com", "pinterest.", "reddit.com",
+                      "quora.com", "tiktok.com", "linkedin.com", "twitter.com", "x.com", "medium.com")
+_NON_PRODUCT_URL_PARTS = ("/blog/", "/blogs/", "/news/", "/article/", "/articles/", "/forum", "/category/",
+                          "/categories/", "/collections/", "/tag/", "/wiki/", "/b/", "/s?", "/search")
+_NON_PRODUCT_TITLE = re.compile(r"\b\d[\d.,]*\s*[km]?\+?\s*views?\b|\bfor sale\b|\bhow to\b|\bvideo\b", re.IGNORECASE)
+# Shops that sell many brands: the site is the seller, not the manufacturer
+_MARKETPLACES = ("amazon.", "ebay.", "alibaba.", "aliexpress.", "walmart.", "flipkart.", "indiamart.",
+                 "made-in-china.", "etsy.", "temu.")
+
+
+def _host(url: Optional[str]) -> str:
+    from urllib.parse import urlparse
+    try:
+        h = (urlparse(url or "").hostname or "").lower()
+    except ValueError:
+        return ""
+    return h[4:] if h.startswith("www.") else h
+
+
+def is_non_product_page(raw: Dict[str, Any]) -> bool:
+    """True for videos, social posts, blogs, articles and category / search listing pages."""
+    url = (raw.get("product_url") or raw.get("datasheet_url") or raw.get("link") or "").lower()
+    host = _host(url)
+    if any(host == h or host.endswith("." + h) or (h.endswith(".") and h in host) for h in _NON_PRODUCT_HOSTS):
+        return True
+    if any(part in url for part in _NON_PRODUCT_URL_PARTS):
+        return True
+    text = f"{raw.get('product_name') or raw.get('title') or ''} {raw.get('manufacturer') or ''}"
+    return bool(_NON_PRODUCT_TITLE.search(text))
+
+
+def clean_manufacturer(raw: Dict[str, Any]) -> Optional[str]:
+    """
+    A readable maker / seller name. Search results only give a display link
+    ("https://www.omc-stepperonline.com › …"), so a missing or link-like name is
+    replaced by the website. On a marketplace the maker is not stated, and the
+    name says so instead of naming the shop as the manufacturer.
+    """
+    mfg = (raw.get("manufacturer") or "").strip()
+    looks_like_link = (not mfg or mfg.lower().startswith("http") or "›" in mfg or "·" in mfg
+                       or "views" in mfg.lower() or mfg.lower().startswith("www"))
+    if not looks_like_link:
+        return mfg
+    host = _host(raw.get("product_url") or raw.get("datasheet_url") or raw.get("link"))
+    if not host:
+        return mfg or None
+    if any(m in host for m in _MARKETPLACES):
+        return f"Maker not stated (sold on {host})"
+    return host
+
+
 def is_relevant_product_result(raw: Dict[str, Any]) -> bool:
     """
     Stage 6.2 — Deterministic relevance filter.
@@ -247,6 +299,10 @@ def is_relevant_product_result(raw: Dict[str, Any]) -> bool:
     mfg     = (raw.get("manufacturer") or "").lower()
 
     combined = f"{title} {snippet} {url} {mfg}"
+
+    # Step 0: videos, social media, blogs, articles, category / search pages are never products
+    if is_non_product_page(raw):
+        return False
 
     # Step 1: hard rejection phrases
     for phrase in _REJECTION_PHRASES:
@@ -567,6 +623,7 @@ def discover_and_evaluate_components(
 
         # Deduplication check by manufacturer AND part_number
 
+        raw = {**raw, "manufacturer": clean_manufacturer(raw)}
         pn  = sanitize_text(raw.get("part_number") or raw.get("model"))
         raw_mfg = sanitize_text(raw.get("manufacturer"))
         
@@ -589,6 +646,13 @@ def discover_and_evaluate_components(
         max_t = raw.get("max_output_torque_nm")
 
         is_complete = all(x is not None for x in [v_v, p_w, n_rpm, n_t, ratio, eff])
+        # A complete gearmotor listing usually states its OUTPUT speed and torque instead of a
+        # motor rating + gear ratio + efficiency. Those listed output values are checked directly.
+        listing = f"{raw.get('product_name') or ''} {raw.get('snippet') or ''}".lower()
+        is_gearmotor = bool(re.search(r"gear(?:ed|box|motor|head|ed motor)?\b|planetary|worm", listing))
+        output_as_listed = (not is_complete and ratio is None and eff is None and v_v is not None
+                            and n_rpm is not None and n_t is not None and is_gearmotor and n_rpm <= 1000)
+        is_complete = is_complete or output_as_listed
         status = DATA_STATUS_DISCOVERED if is_complete else DATA_STATUS_DATA_INCOMPLETE
 
         if not existing:
@@ -646,10 +710,14 @@ def discover_and_evaluate_components(
             if comp.voltage_v and comp.voltage_v > max_voltage_v:
                 continue  # Voltage exceeds user constraint
 
-            output_speed_rpm    = comp.nominal_speed_rpm / comp.gear_ratio
-            calc_output_torque  = calculate_gearbox_output_torque(
-                comp.nominal_torque_nm, comp.gear_ratio, comp.efficiency
-            ).result
+            if output_as_listed:
+                output_speed_rpm   = n_rpm
+                calc_output_torque = n_t
+            else:
+                output_speed_rpm    = comp.nominal_speed_rpm / comp.gear_ratio
+                calc_output_torque  = calculate_gearbox_output_torque(
+                    comp.nominal_torque_nm, comp.gear_ratio, comp.efficiency
+                ).result
 
             torque_meets = calc_output_torque >= design_torque
             speed_meets  = output_speed_rpm  >= required_speed_rpm
@@ -691,16 +759,20 @@ def discover_and_evaluate_components(
                     "unit":         "Nm"
                 },
                 "gearbox_output_torque": {
-                    "formula":      "T_output = Motor Torque × Gear Ratio × Efficiency",
-                    "substitution": f"{comp.nominal_torque_nm} Nm × {comp.gear_ratio} × {comp.efficiency}",
+                    "formula":      ("Rated output torque as listed by the seller (complete gearmotor — gear ratio not used)"
+                                     if output_as_listed else "T_output = Motor Torque × Gear Ratio × Efficiency"),
+                    "substitution": (f"{n_t} Nm at the output shaft, as listed" if output_as_listed
+                                     else f"{comp.nominal_torque_nm} Nm × {comp.gear_ratio} × {comp.efficiency}"),
                     "result":       round(calc_output_torque, 4),
                     "unit":         "Nm",
                     "comparison":   f"{round(calc_output_torque, 4)} Nm >= {design_torque} Nm",
                     "status":       "MEETS" if torque_meets else "DOES_NOT_MEET"
                 },
                 "output_speed": {
-                    "formula":      "Output Speed = Motor RPM / Ratio",
-                    "substitution": f"{comp.nominal_speed_rpm} RPM / {comp.gear_ratio}",
+                    "formula":      ("Rated output speed as listed by the seller (complete gearmotor)"
+                                     if output_as_listed else "Output Speed = Motor RPM / Ratio"),
+                    "substitution": (f"{n_rpm} RPM at the output shaft, as listed" if output_as_listed
+                                     else f"{comp.nominal_speed_rpm} RPM / {comp.gear_ratio}"),
                     "result":       round(output_speed_rpm, 2),
                     "unit":         "RPM",
                     "comparison":   f"{round(output_speed_rpm, 2)} RPM >= {required_speed_rpm} RPM",
@@ -715,7 +787,8 @@ def discover_and_evaluate_components(
                 fit = compute_fit(
                     calc_output_torque, design_torque, output_speed_rpm, required_speed_rpm,
                     speed_tolerance_pct if speed_tolerance_pct is not None else DEFAULT_SPEED_TOLERANCE_PCT,
-                    comp.power_w * comp.efficiency if comp.power_w else None, req_power_w,
+                    (comp.power_w * comp.efficiency if comp.efficiency else comp.power_w) if comp.power_w else None,
+                    req_power_w,
                 )
 
             perf = {
@@ -774,6 +847,8 @@ def discover_and_evaluate_components(
             "performance":        perf,
             "calculation_trace":  calc_trace,
             "engineering_status": overall_status,
+            "rating_basis":       ("OUTPUT_AS_LISTED" if output_as_listed
+                                   else "MOTOR_AND_GEARBOX" if is_complete else None),
             "fit":                fit,
         })
 
