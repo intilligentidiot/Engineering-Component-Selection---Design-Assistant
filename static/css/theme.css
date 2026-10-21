@@ -1,18 +1,24 @@
 /* ===================================================
    Engineering Calculation Assistant — theme layer
    Loaded after style.css. Two themes on <html data-theme="light|dark">:
-   light (default) and dark. Calm engineering blue for actions; the brand
-   red stays on the logo mark only; red otherwise means a real problem.
+   light (default) and dark. Colours follow the TMD brand kit: Graphite Navy
+   #223043 and Signal Red #C91D35 (core), Ice Blue #D6E0EB, Mist #F3F6F9 and
+   Cobalt #155FA6 (UI accent). Red appears in the logo; elsewhere it means a
+   real problem.
    =================================================== */
 
 :root {
-    --primary: #1f5fbf;
-    --primary-hover: #184e9e;
-    --primary-soft: rgba(31, 95, 191, 0.10);
-    --primary-ring: rgba(31, 95, 191, 0.22);
-    --brand: #c8102e;
-    --header-bg: linear-gradient(135deg, #0d1b2e, #15294a);
-    --header-line: #22385e;
+    --navy: #223043;
+    --ice: #d6e0eb;
+    --mist: #f3f6f9;
+    --primary: #155fa6;
+    --primary-hover: #104b85;
+    --primary-soft: rgba(21, 95, 166, 0.09);
+    --primary-ring: rgba(21, 95, 166, 0.22);
+    --brand: #c91d35;
+    --link: #155fa6;
+    --header-bg: #223043;
+    --header-line: #2f4058;
     --shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.08);
     --suggest: #6b46c1;
     --suggest-soft: rgba(107, 70, 193, 0.08);
@@ -21,31 +27,51 @@
 
 /* ── Light theme: the existing colour names re-pointed at light values ── */
 :root[data-theme="light"] {
-    --dark-950: #f3f5f8;   /* page */
+    --dark-950: #f3f6f9;   /* page (Mist) */
     --dark-900: #ffffff;   /* tab bar */
     --dark-800: #ffffff;   /* panels */
-    --dark-700: #f7f9fb;   /* inputs, cards */
-    --dark-600: #e2e7ee;   /* borders */
-    --dark-500: #c9d1dc;   /* stronger borders */
-    --silver-100: #16202c; /* main text */
-    --silver-200: #2a3644;
-    --silver-400: #566376;
-    --silver-600: #7b8696;
+    --dark-700: #f8fafc;   /* inputs, cards */
+    --dark-600: #dfe6ee;   /* borders */
+    --dark-500: #c3cfdc;   /* stronger borders */
+    --silver-100: #1a2433; /* main text (Graphite Navy family) */
+    --silver-200: #2b3a50;
+    --silver-400: #4f5e72;
+    --silver-600: #5c697b;
     --green-400: #1d7a3a;
     --green-dim: rgba(29, 122, 58, 0.10);
     --amber-400: #9a5b00;
-    --blue-400: #1f5fbf;
-    --blue-dim: rgba(31, 95, 191, 0.09);
+    --blue-400: #155fa6;
+    --blue-dim: rgba(21, 95, 166, 0.09);
     --red-500: #c62828;
     --red-glow: rgba(198, 40, 40, 0.18);
     --suggest: #6b46c1;
     color-scheme: light;
 }
 :root[data-theme="dark"] {
-    --primary: #4f8be6;
-    --primary-hover: #6a9ef0;
-    --primary-soft: rgba(79, 139, 230, 0.14);
-    --primary-ring: rgba(79, 139, 230, 0.28);
+    /* Brand navy family instead of neutral black */
+    --dark-950: #121a26;   /* page */
+    --dark-900: #172030;   /* tab bar */
+    --dark-800: #1b2536;   /* panels */
+    --dark-700: #212c3f;   /* inputs, cards */
+    --dark-600: #2e3b51;   /* borders */
+    --dark-500: #3e4d66;   /* stronger borders */
+    --silver-100: #edf1f6;
+    --silver-200: #d0d9e4;
+    --silver-400: #a9b6c7;
+    --silver-600: #98a5b8;
+    --green-400: #6cc070;
+    --red-500: #ff6f69;
+    --red-glow: rgba(255, 111, 105, 0.16);
+    --amber-400: #ffc24d;
+    --green-dim: rgba(108, 192, 112, 0.13);
+    --blue-400: #9cbde0;   /* Sky, lifted for small text */
+    --blue-dim: rgba(132, 170, 206, 0.14);
+    --primary: #2f6db3;    /* Cobalt, lifted just enough for dark panels; white text stays readable */
+    --primary-hover: #3a7cc4;
+    --link: #84aace;
+    --primary-soft: rgba(132, 170, 206, 0.14);
+    --primary-ring: rgba(132, 170, 206, 0.30);
+    --header-bg: #1a2535;
     --shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
     --suggest: #b39ddb;
     --suggest-soft: rgba(179, 157, 219, 0.10);
@@ -53,10 +79,22 @@
     color-scheme: dark;
 }
 
-/* ── Header: calm navy, brand red only on the logo mark ── */
-.site-header { background: var(--header-bg); border-bottom: 1px solid var(--header-line); box-shadow: 0 1px 0 rgba(0,0,0,0.15); }
-.logo-mark { background: var(--brand); border-color: var(--brand); }
-.logo-secondary { color: rgba(255, 255, 255, 0.72); }
+/* ── Header: Graphite Navy with the supplied light (reversed) logo ── */
+.site-header { background: var(--header-bg); border-bottom: 3px solid var(--brand); box-shadow: 0 1px 0 rgba(0,0,0,0.15); }
+.logo { gap: 0.9rem; }
+.logo-img { width: 190px; height: auto; display: block; }   /* brand minimum: 180 px wide */
+.logo-divider { width: 1px; align-self: stretch; margin: 4px 0; background: rgba(255, 255, 255, 0.22); }
+.logo-secondary { color: var(--ice); font-size: 0.72rem; font-weight: 600; line-height: 1.35; letter-spacing: 0.08em; }
+@media (max-width: 640px) {
+    .logo-img { width: 44px; height: auto; }                /* symbol only on phones */
+}
+
+/* ── Dropdown lists: always dark text on a light list, whatever the theme ──
+   (header selects use white text on navy; their option lists are drawn by the
+   browser on a white sheet, so the options need their own colours) */
+select option, select optgroup { background: #ffffff; color: #1a2433; }
+:root[data-theme="dark"] select option, :root[data-theme="dark"] select optgroup { background: #1f2a3a; color: #e8edf3; }
+.units-pick select option, .units-pick select optgroup { background: #ffffff; color: #1a2433; }
 
 /* ── Actions and focus in engineering blue ── */
 .btn-primary { background: var(--primary); box-shadow: none; }
@@ -68,7 +106,8 @@
 .rank-number.top { background: var(--primary); box-shadow: none; }
 .result-card:hover { border-color: var(--primary); }
 .eff-bar-fill { background: var(--primary); }
-.link-btn { color: var(--primary); }
+.link-btn { color: var(--link); }
+main a { color: var(--link); }
 .sz-ai-box textarea:focus { border-color: var(--primary); }
 
 /* Key numbers: the main answer stands out without looking like an error */
@@ -103,7 +142,6 @@ select.u-sel { font-size: 0.85rem; padding: 0.1rem 0.25rem; border-color: var(--
 :root[data-theme="light"] .sz-stepline { background: #f7f9fb; }
 :root[data-theme="light"] .site-footer { color: var(--silver-600); border-top-color: var(--dark-600); }
 :root[data-theme="light"] .data-status.DISCOVERED { color: #8a5300; }
-:root[data-theme="light"] select.u-sel option, :root[data-theme="light"] .input-row select option { background: #fff; color: var(--silver-100); }
 :root[data-theme="light"] .pj-card { background: #ffffff; }
 :root[data-theme="light"] .pj-card.done .pj-n { background: var(--green-400); color: #fff; }
 
@@ -131,8 +169,8 @@ select.u-sel { font-size: 0.85rem; padding: 0.1rem 0.25rem; border-color: var(--
         --dark-950: #ffffff; --dark-900: #ffffff; --dark-800: #ffffff; --dark-700: #f6f7f9;
         --dark-600: #d9dee5; --dark-500: #c4cbd4;
         --silver-100: #111820; --silver-200: #222c38; --silver-400: #4a5563; --silver-600: #6b7480;
-        --green-400: #1d6b33; --amber-400: #8a5300; --blue-400: #1f5fbf; --red-500: #b42318;
-        --primary: #1f5fbf; --suggest: #5b3aa8; --suggest-line: #b9a6e3; --suggest-soft: #f4f0fb;
+        --green-400: #1d6b33; --amber-400: #8a5300; --blue-400: #155fa6; --red-500: #b42318;
+        --primary: #155fa6; --suggest: #5b3aa8; --suggest-line: #b9a6e3; --suggest-soft: #f4f0fb;
     }
     html, body { background: #fff !important; color: #111820; font-size: 10.5pt; }
     * { animation: none !important; transition: none !important; box-shadow: none !important; }
@@ -156,8 +194,10 @@ select.u-sel { font-size: 0.85rem; padding: 0.1rem 0.25rem; border-color: var(--
     body[data-print="project"] .pj-title { display: none; }   /* already the report title */
 
     /* Report header and closing note */
-    .report-head { display: block; border-bottom: 2px solid #1f5fbf; padding-bottom: 4mm; margin-bottom: 6mm; }
-    .rh-brand { font-size: 9pt; color: #4a5563; letter-spacing: 0.04em; text-transform: uppercase; }
+    .report-head { display: block; border-bottom: 2px solid #223043; padding-bottom: 4mm; margin-bottom: 6mm; }
+    .rh-brand { display: flex; align-items: center; justify-content: space-between; gap: 6mm;
+                font-size: 9pt; color: #223043; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; }
+    .rh-logo { height: 14mm; width: auto; }
     .report-head h1 { font-size: 17pt; margin: 2mm 0 1.5mm; color: #111820; }
     .rh-meta { font-size: 9.5pt; color: #4a5563; }
     .rh-label { font-size: 8.5pt; font-weight: 700; color: #4a5563; text-transform: uppercase; margin-top: 3mm; }
@@ -179,5 +219,5 @@ select.u-sel { font-size: 0.85rem; padding: 0.1rem 0.25rem; border-color: var(--
     .input-row input { background: #fff !important; color: #111820 !important; }
     .pj-row { grid-template-columns: 1fr 330px; }
     .result-card-detail { display: grid !important; }
-    a { color: #1f5fbf; text-decoration: none; }
+    a { color: #155fa6; text-decoration: none; }
 }
