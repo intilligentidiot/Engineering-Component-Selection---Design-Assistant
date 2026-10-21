@@ -6,6 +6,7 @@ httpx
 jinja2
 serpapi==0.1.5
 openai
+anthropic
 google-genai
 beautifulsoup4
 pypdf

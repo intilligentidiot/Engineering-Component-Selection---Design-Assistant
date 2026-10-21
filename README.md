@@ -39,6 +39,7 @@ The AI never performs calculations and the tool never invents engineering data. 
 
 | Variable | Purpose |
 | --- | --- |
-| `AI_PROVIDER` | `mock` (built-in reader, default), `gemini` or `openai` |
-| `GEMINI_API_KEY` / `OPENAI_API_KEY` | Key for the chosen AI service |
+| `AI_PROVIDER` | `mock` (built-in reader, default), `claude`, `gemini` or `openai` |
+| `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` / `OPENAI_API_KEY` | Key for the chosen AI service |
+| `CLAUDE_MODEL` / `CLAUDE_EFFORT` | Optional: Claude model (default `claude-opus-5-5`) and effort `low`/`medium`/`high` (default `medium`) |
 | `SERPAPI_KEY` | Real internet product search |

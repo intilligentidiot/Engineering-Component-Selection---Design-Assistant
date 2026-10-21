@@ -14,7 +14,7 @@ Guards applied to every provider's output (in SizingRequirementParser.parse):
 Extracted values are AI_EXTRACTED: the UI asks the user to confirm them before
 they are used (spec §8).
 
-Provider selection follows app/ai/provider.py (AI_PROVIDER=mock|openai|gemini).
+Provider selection follows app/ai/provider.py (AI_PROVIDER=mock|claude|openai|gemini).
 """
 import os
 import re
@@ -584,12 +584,26 @@ class OpenAISizingParser(SizingRequirementParser):
         return resp.output_parsed
 
 
+class ClaudeSizingParser(SizingRequirementParser):
+    name = "claude"
+
+    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
+        self._api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
+        self._model = model
+
+    def extract(self, text: str) -> SizingExtraction:
+        from app.ai.claude_client import claude_structured
+        return claude_structured(SizingExtraction, SYSTEM_INSTRUCTION, text, api_key=self._api_key, model=self._model)
+
+
 def get_sizing_parser() -> SizingRequirementParser:
     provider = os.environ.get("AI_PROVIDER", "mock").strip().lower()
+    if provider == "claude":
+        return ClaudeSizingParser()
     if provider == "gemini":
         return GeminiSizingParser()
     if provider == "openai":
         return OpenAISizingParser()
     if provider == "mock":
         return MockSizingParser()
-    raise RuntimeError(f"Unknown AI_PROVIDER '{provider}'. Supported values: mock, openai, gemini")
+    raise RuntimeError(f"Unknown AI_PROVIDER '{provider}'. Supported values: mock, claude, openai, gemini")

@@ -9,6 +9,7 @@ construction logic lives in routes.py or anywhere else.
 
 Configuration:
     AI_PROVIDER=mock    → MockRequirementParser   (default; safe for tests)
+    AI_PROVIDER=claude  → ClaudeRequirementParser (requires ANTHROPIC_API_KEY)
     AI_PROVIDER=openai  → OpenAIRequirementParser (requires OPENAI_API_KEY)
     AI_PROVIDER=gemini  → GeminiRequirementParser (requires GEMINI_API_KEY)
 
@@ -26,7 +27,7 @@ from app.ai.requirement_parser import RequirementParser
 
 logger = logging.getLogger(__name__)
 
-_SUPPORTED_PROVIDERS = ("mock", "openai", "gemini")
+_SUPPORTED_PROVIDERS = ("mock", "claude", "openai", "gemini")
 
 
 def get_parser() -> RequirementParser:
@@ -40,6 +41,11 @@ def get_parser() -> RequirementParser:
     falling back to an unexpected implementation.
     """
     provider = os.environ.get("AI_PROVIDER", "mock").strip().lower()
+
+    if provider == "claude":
+        from app.ai.claude_parser import ClaudeRequirementParser
+        logger.info("[AI Provider] Claude")
+        return ClaudeRequirementParser()
 
     if provider == "openai":
         from app.ai.openai_parser import OpenAIRequirementParser

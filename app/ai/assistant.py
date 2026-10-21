@@ -12,7 +12,7 @@ One entry point for any engineering question typed by the user.
 The AI never produces result numbers: checked modules and the deterministic
 method evaluator (app/engine/method_eval.py) do all arithmetic.
 
-Provider follows AI_PROVIDER (mock | gemini | openai). The mock provider is
+Provider follows AI_PROVIDER (mock | claude | gemini | openai). The mock provider is
 rule-based and cannot build methods for new topics.
 """
 import os
@@ -42,6 +42,9 @@ def _provider() -> str:
 
 def call_structured(schema: Type[BaseModel], system: str, text: str) -> BaseModel:
     provider = _provider()
+    if provider == "claude":
+        from app.ai.claude_client import claude_structured
+        return claude_structured(schema, system, text)
     if provider == "gemini":
         key = os.environ.get("GEMINI_API_KEY")
         if not key:

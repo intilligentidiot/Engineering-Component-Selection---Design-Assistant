@@ -235,79 +235,84 @@ class OpenAIRequirementParser(RequirementParser):
                 parser_status="ERROR_UNEXPECTED",
             )
 
-        # ── 3. Validate extracted values ────────────────────────────────
-        # Any invalid engineering value (negative, wrong type) is rejected.
-        validation_errors: list[str] = []
+        return build_parse_result(extracted, "OpenAI")
 
-        def _check_positive(val: Optional[float], name: str) -> Optional[float]:
-            if val is None:
-                return None
-            if not isinstance(val, (int, float)):
-                validation_errors.append(f"{name} has invalid type: {type(val).__name__}")
-                return None
-            if val <= 0:
-                validation_errors.append(f"{name} must be positive; got {val}")
-                return None
-            return float(val)
 
-        torque  = _check_positive(extracted.required_torque_nm,  "required_torque_nm")
-        speed   = _check_positive(extracted.required_speed_rpm,  "required_speed_rpm")
-        voltage = _check_positive(extracted.max_voltage_v,       "max_voltage_v")
-        sf      = _check_positive(extracted.service_factor,      "service_factor")
+def build_parse_result(extracted: "_AIExtractedRequirements", provider: str) -> ParseResult:
+    """Validate extracted values and build the ParseResult (shared by the OpenAI and Claude parsers)."""
+    # ── 3. Validate extracted values ────────────────────────────────
+    # Any invalid engineering value (negative, wrong type) is rejected.
+    validation_errors: list[str] = []
 
-        # Extra fields the model should not have invented are silently ignored
-        # because _AIExtractedRequirements has a closed schema.
+    def _check_positive(val: Optional[float], name: str) -> Optional[float]:
+        if val is None:
+            return None
+        if not isinstance(val, (int, float)):
+            validation_errors.append(f"{name} has invalid type: {type(val).__name__}")
+            return None
+        if val <= 0:
+            validation_errors.append(f"{name} must be positive; got {val}")
+            return None
+        return float(val)
 
-        if validation_errors:
-            logger.warning("[AI Provider] OpenAI — validation errors: %s", validation_errors)
-            return ParseResult(
-                requirements=ParsedRequirements(),
-                missing_fields=["required_torque_nm", "required_speed_rpm", "max_voltage_v"],
-                clarifications=validation_errors,
-                parser_status="ERROR_VALIDATION_FAILED",
-            )
+    torque  = _check_positive(extracted.required_torque_nm,  "required_torque_nm")
+    speed   = _check_positive(extracted.required_speed_rpm,  "required_speed_rpm")
+    voltage = _check_positive(extracted.max_voltage_v,       "max_voltage_v")
+    sf      = _check_positive(extracted.service_factor,      "service_factor")
 
-        # ── 4. Build application-level result ───────────────────────────
-        try:
-            reqs = ParsedRequirements(
-                required_torque_nm=torque,
-                required_speed_rpm=speed,
-                max_voltage_v=voltage,
-                service_factor=sf,
-                application=(extracted.application or None),
-            )
-        except PydanticValidationError as exc:
-            logger.error("[AI Provider] OpenAI — Pydantic schema rejection: %s", exc)
-            return ParseResult(
-                requirements=ParsedRequirements(),
-                missing_fields=["required_torque_nm", "required_speed_rpm", "max_voltage_v"],
-                clarifications=["AI output failed application schema validation."],
-                parser_status="ERROR_VALIDATION_FAILED",
-            )
+    # Extra fields the model should not have invented are silently ignored
+    # because _AIExtractedRequirements has a closed schema.
 
-        clarifications: list[str] = list(extracted.clarifications or [])
-
-        missing: list[str] = []
-        if reqs.required_torque_nm is None:
-            missing.append("required_torque_nm")
-        if reqs.required_speed_rpm is None:
-            missing.append("required_speed_rpm")
-        if reqs.max_voltage_v is None:
-            missing.append("max_voltage_v")
-
-        if clarifications:
-            status = "NEEDS_CLARIFICATION"
-        elif missing:
-            status = "PARTIAL"
-            clarifications.append(
-                "Please provide the missing engineering specifications to get a recommendation."
-            )
-        else:
-            status = "PARSED"
-
+    if validation_errors:
+        logger.warning("[AI Provider] %s — validation errors: %s", provider, validation_errors)
         return ParseResult(
-            requirements=reqs,
-            missing_fields=missing,
-            clarifications=clarifications,
-            parser_status=status,
+            requirements=ParsedRequirements(),
+            missing_fields=["required_torque_nm", "required_speed_rpm", "max_voltage_v"],
+            clarifications=validation_errors,
+            parser_status="ERROR_VALIDATION_FAILED",
         )
+
+    # ── 4. Build application-level result ───────────────────────────
+    try:
+        reqs = ParsedRequirements(
+            required_torque_nm=torque,
+            required_speed_rpm=speed,
+            max_voltage_v=voltage,
+            service_factor=sf,
+            application=(extracted.application or None),
+        )
+    except PydanticValidationError as exc:
+        logger.error("[AI Provider] %s — Pydantic schema rejection: %s", provider, exc)
+        return ParseResult(
+            requirements=ParsedRequirements(),
+            missing_fields=["required_torque_nm", "required_speed_rpm", "max_voltage_v"],
+            clarifications=["AI output failed application schema validation."],
+            parser_status="ERROR_VALIDATION_FAILED",
+        )
+
+    clarifications: list[str] = list(extracted.clarifications or [])
+
+    missing: list[str] = []
+    if reqs.required_torque_nm is None:
+        missing.append("required_torque_nm")
+    if reqs.required_speed_rpm is None:
+        missing.append("required_speed_rpm")
+    if reqs.max_voltage_v is None:
+        missing.append("max_voltage_v")
+
+    if clarifications:
+        status = "NEEDS_CLARIFICATION"
+    elif missing:
+        status = "PARTIAL"
+        clarifications.append(
+            "Please provide the missing engineering specifications to get a recommendation."
+        )
+    else:
+        status = "PARSED"
+
+    return ParseResult(
+        requirements=reqs,
+        missing_fields=missing,
+        clarifications=clarifications,
+        parser_status=status,
+    )
