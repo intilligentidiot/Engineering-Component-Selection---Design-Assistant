@@ -213,13 +213,16 @@
 
     // Redraw the last result when the units change, so "in your units" lines follow
     let lastShown = null;
-    Units.onChange(() => {
+    function redraw() {
         if (!lastShown || panel.hidden) return;
         const open = body.querySelector("details.sz-details")?.open;
         lastShown[0](lastShown[1], true);
         const d = body.querySelector("details.sz-details");
         if (d && open) d.open = true;
-    });
+    }
+    Units.onChange(redraw);
+    document.addEventListener("standards-change", redraw);   // country / customer standard changed
+    const stdNote = (standard, ai) => window.Standards ? Standards.noteFor(standard, ai) : "";
 
     function renderBearing(r, quiet = false) {
         lastShown = [renderBearing, r];
@@ -233,6 +236,7 @@
                 ${r.min_dynamic_rating_kn != null ? card("Minimum rating C", r.min_dynamic_rating_kn, "kN", "look for a bearing with at least this C", "key") : ""}
                 ${card("Equivalent load P", r.equivalent_load_n, "N")}
             </div>
+            ${stdNote("ISO 281", false)}
             ${list(r.notes || [], "info", "Notes")}
             <details class="sz-details"><summary>Show the full calculation (${r.steps.length} steps)</summary>${stepsHtml(r.steps)}</details>`;
         panel.hidden = false;
@@ -249,6 +253,7 @@
             <div class="sz-note ai-method"><strong>⚠ Check before use.</strong> The formulas below were chosen by the AI, not
                 taken from a checked module. Every number was calculated by the tool — verify the method and units against the
                 standard before relying on the result.</div>
+            ${stdNote(plan.standard, true)}
             ${list(typicalUsed(), "info", "Typical values suggested by the AI that were used — please check")}
             ${list(plan.limitations || [], "warn", "Limitations of this method")}
             <details class="sz-details" open><summary>Show the full calculation (${r.steps.length} steps)</summary>${stepsHtml(r.steps)}</details>`;

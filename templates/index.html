@@ -11,7 +11,7 @@
     <link rel="icon" type="image/png" sizes="128x128" href="/static/img/favicon-128.png">
     <link rel="apple-touch-icon" href="/static/img/favicon-128.png">
     <link rel="stylesheet" href="/static/css/style.css?v=9.7">
-    <link rel="stylesheet" href="/static/css/theme.css?v=1.4">
+    <link rel="stylesheet" href="/static/css/theme.css?v=1.5">
     <script>
         // Apply the saved theme before the page draws (light by default)
         (function () {
@@ -94,6 +94,14 @@
                                 <button type="button" id="sz-manual-btn" class="link-btn">or fill in the full form yourself</button>
                             </div>
                             <p class="field-hint">Only the numbers you write are used as your values. Anything missing is asked, or filled with a clearly marked typical value you can change.</p>
+                            <div class="std-row">
+                                <label class="std-field">Project country
+                                    <select id="std-country" title="Country the machine is designed for"></select>
+                                </label>
+                                <label class="std-field std-grow"><span>Customer's required standard <span class="std-opt">(optional)</span></span>
+                                    <input type="text" id="std-customer" maxlength="120" placeholder="e.g. AS 4100, ASME B106.1M, BS EN 13001">
+                                </label>
+                            </div>
                             <div id="sz-ai-feedback" hidden></div>
                         </div>
 
@@ -369,11 +377,12 @@
            every number is calculated by the tool and shown step by step</p>
     </footer>
 
+    <script src="/static/js/standards.js?v=1.0"></script>
     <script src="/static/js/units.js?v=9.7"></script>
     <script src="/static/js/main.js?v=9.7"></script>
     <script src="/static/js/sizing.js?v=9.7"></script>
-    <script src="/static/js/assistant.js?v=9.7"></script>
-    <script src="/static/js/project.js?v=9.7"></script>
-    <script src="/static/js/report.js?v=1.0"></script>
+    <script src="/static/js/assistant.js?v=9.8"></script>
+    <script src="/static/js/project.js?v=9.8"></script>
+    <script src="/static/js/report.js?v=1.1"></script>
 </body>
 </html>

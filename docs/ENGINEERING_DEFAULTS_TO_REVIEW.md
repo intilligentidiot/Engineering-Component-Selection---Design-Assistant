@@ -153,3 +153,22 @@ When someone describes a whole project, the tool shows the information needed an
 ## 11. Not yet supported
 
 Bulk-material conveyors (CEMA), screw conveyors, mixers, pumps and fans, crushers, extruders, presses/punching, and vehicles. Each needs its own approved equations before it is added.
+
+## 12. Project country and standards notes
+
+The engineer can set the **project country** and the **customer's required standard** above the question box.
+The tool does not switch methods: every check still follows the standard it names. When a country or customer
+standard is set, each built-in check (and each AI-chosen method) shows which standard it follows and asks the
+engineer to confirm it is accepted for the project.
+
+Region notes shown today (`static/js/standards.js`, `REGION_NOTES`) — **please confirm or correct**:
+
+| Built-in check follows | Country | Note shown |
+|---|---|---|
+| ISO 281 (bearing life) | USA | US projects often cite ANSI/ABMA Std 9 (ball) and Std 11 (roller), which use the same basic rating-life method. |
+| ISO 5048 / DIN 22101 (bulk conveyors) | USA, Canada | Projects often follow the CEMA method (Belt Conveyors for Bulk Materials); it differs from ISO 5048, so results will not match exactly. |
+| ASME shaft-design approach | Europe (EU) | European projects often use DIN 743 for shaft strength, which also covers fatigue. |
+
+Every other country / check combination shows only the general "confirm it is accepted" note.
+Planned next: a standards table the engineer fills in per part and country, and passing the country and customer
+standard to the AI so AI-built plans follow them.

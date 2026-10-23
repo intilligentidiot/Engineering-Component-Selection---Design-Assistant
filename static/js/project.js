@@ -35,7 +35,9 @@
                 ${ai ? "" : "Motor + gearbox selection and bearing life use the tool's checked calculations."}
             </div>
             <h2 class="pj-title">${esc(plan.title)}</h2>
-            <p class="field-hint">${esc(plan.summary)}</p>`;
+            <p class="field-hint">${esc(plan.summary)}</p>
+            <div id="pj-std-summary"></div>`;
+        stdSummary();
         renderInfo();
         $("pj-limits").innerHTML = (plan.limitations || []).length
             ? `<div class="sz-note warn"><strong>Limitations of this plan</strong><ul>${plan.limitations.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>` : "";
@@ -43,6 +45,21 @@
         await evaluate();
         area.scrollIntoView({ behavior: "smooth", block: "start" });
     }
+
+    // Project country / customer standard (static/js/standards.js)
+    function stdSummary() {
+        const el = $("pj-std-summary");
+        const s = window.Standards ? Standards.summaryText() : "";
+        if (el) el.innerHTML = s ? `<p class="std-summary">${esc(s)}. Each check below says which standard it follows — confirm they are accepted for this project.</p>` : "";
+    }
+    document.addEventListener("standards-change", () => {
+        if (!plan || area.hidden) return;
+        stdSummary();
+        if (lastResult) renderCalcs(lastResult);
+    });
+
+    // A value with its unit as plain text (for sentences — no unit selector)
+    const plain = (v, u) => v == null ? "—" : `${Units.fmt(Units.convert(v, u, Units.displayUnit(u)))} ${Units.displayUnit(u)}`;
 
     // ── 1. Information needed ────────────────────────────────
     function statusTag(i) {
@@ -278,7 +295,7 @@
             bodyHtml = m.length
                 ? `<div class="pj-results">${m.map((x, i) => `<div class="pj-res"><span>${i + 1}. ${esc(x.motor)} (${esc(x.motor_maker)}) + ${esc(x.gearbox)} ${x.ratio}:1</span>
                     <strong>${Units.valueHtml(x.output_torque_nm, "N·m")} @ ${Units.valueHtml(x.output_speed_rpm, "rpm")} ${x.fit != null ? `<span class="fit-pill">${x.fit}% fit</span>` : ""}</strong></div>`).join("")}</div>${netHtml}`
-                : `<div class="pj-wait">No motor + gearbox in the built-in list can deliver ${Units.valueHtml(r.used.required_torque_nm, "N·m")} × ${fmt(r.used.service_factor ?? 1)} at ${Units.valueHtml(r.used.required_speed_rpm, "rpm")} on ${Units.valueHtml(r.used.max_voltage_v, "V")}.
+                : `<div class="pj-wait">No motor + gearbox in the built-in list can deliver ${esc(plain(r.used.required_torque_nm, "N·m"))} × ${fmt(r.used.service_factor ?? 1)} (service factor) at ${esc(plain(r.used.required_speed_rpm, "rpm"))} on ${esc(plain(r.used.max_voltage_v, "V"))}.
                     Tick "Also search the internet" above, or use these requirements with a supplier.</div>${netHtml}`;
         }
         const noMatch = c.kind === "motor_selection" && r.status === "DONE" && !(r.motors || []).length;
@@ -286,7 +303,8 @@
         return `<div class="pj-card ${noMatch ? "waiting" : r.status.toLowerCase()}">
             <div class="pj-card-head"><span class="pj-n">${n}</span><div><div class="pj-card-title">${esc(c.title)} ${tag}</div>
                 <div class="field-hint">${esc(c.purpose)}${c.standard ? ` · <em>${esc(c.standard)}</em>` : ""}${c.kind !== "formula" ? " · checked calculation" : ""}</div>
-                ${c.note ? `<div class="field-hint">${esc(c.note)}</div>` : ""}</div></div>
+                ${c.note ? `<div class="field-hint">${esc(c.note)}</div>` : ""}
+                ${window.Standards && (c.standard || c.kind !== "formula") ? Standards.noteFor(c.standard, plan.origin === "AI") : ""}</div></div>
             ${bodyHtml}</div>`;
     }
 

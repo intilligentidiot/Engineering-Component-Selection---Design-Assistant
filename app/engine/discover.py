@@ -230,6 +230,31 @@ _NON_PRODUCT_HOSTS = ("youtube.com", "youtu.be", "facebook.com", "instagram.com"
                       "quora.com", "tiktok.com", "linkedin.com", "twitter.com", "x.com", "medium.com")
 _NON_PRODUCT_URL_PARTS = ("/blog/", "/blogs/", "/news/", "/article/", "/articles/", "/forum", "/category/",
                           "/categories/", "/collections/", "/tag/", "/wiki/", "/b/", "/s?", "/search")
+# Torque written in a listing's title / snippet, in the units sellers use (factor to N·m)
+_N = r"(\d+(?:[.,]\d+)?)\s*"
+_SEP = r"\s*[.\-·*]?\s*"
+_TORQUE_UNITS = [
+    (re.compile(_N + r"(?:n" + _SEP + r"m|nm)\b", re.IGNORECASE), 1.0),
+    (re.compile(_N + r"kg?f?" + _SEP + r"cm\b", re.IGNORECASE), 0.0980665),
+    (re.compile(_N + r"(?:in(?:ch)?" + _SEP + r"(?:lbs?|lbf|pounds?)|(?:lbs?|lbf|pounds?)" + _SEP + r"in(?:ch(?:es)?)?)\b", re.IGNORECASE), 0.112985),
+    (re.compile(_N + r"(?:f(?:oo)?t" + _SEP + r"(?:lbs?|lbf|pounds?)|(?:lbs?|lbf|pounds?)" + _SEP + r"f(?:oo)?t)\b", re.IGNORECASE), 1.35582),
+    (re.compile(_N + r"oz" + _SEP + r"in\b", re.IGNORECASE), 0.00706155),
+]
+
+
+def listed_max_torque_nm(text: str) -> Optional[float]:
+    """Largest torque a listing states anywhere in its text, in N·m (None if none is stated).
+    A listing whose largest stated torque is below the requirement cannot meet it."""
+    found = []
+    for rx, k in _TORQUE_UNITS:
+        for m in rx.finditer(text or ""):
+            try:
+                found.append(float(m.group(1).replace(",", ".")) * k)
+            except ValueError:
+                pass
+    return max(found) if found else None
+
+
 _NON_PRODUCT_TITLE = re.compile(r"\b\d[\d.,]*\s*[km]?\+?\s*views?\b|\bfor sale\b|\bhow to\b|\bvideo\b", re.IGNORECASE)
 # Shops that sell many brands: the site is the seller, not the manufacturer
 _MARKETPLACES = ("amazon.", "ebay.", "alibaba.", "aliexpress.", "walmart.", "flipkart.", "indiamart.",
@@ -653,6 +678,11 @@ def discover_and_evaluate_components(
         output_as_listed = (not is_complete and ratio is None and eff is None and v_v is not None
                             and n_rpm is not None and n_t is not None and is_gearmotor and n_rpm <= 1000)
         is_complete = is_complete or output_as_listed
+        if not is_complete:
+            stated = listed_max_torque_nm(listing)
+            if stated is not None and stated < design_torque:
+                print(f"[Too small REJECT] '{(raw.get('product_name') or '')[:60]}' — states {stated:.2f} N·m, needs {design_torque:.2f}")
+                continue
         status = DATA_STATUS_DISCOVERED if is_complete else DATA_STATUS_DATA_INCOMPLETE
 
         if not existing:

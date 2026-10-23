@@ -281,3 +281,49 @@ def test_gearmotor_too_weak_is_not_meets(db_session):
         db=db_session, required_speed_rpm=50.0, required_torque_nm=6.0, service_factor=1.5,
         max_voltage_v=24.0, provider=GearmotorListingProvider(), top_n=5)
     assert not any(x["part_number"] == "M52B60-G52-50" and x["engineering_status"] == "MEETS" for x in results)
+
+
+# ── Listings that state a torque too small for the job are dropped ─────
+
+from app.engine.discover import listed_max_torque_nm
+
+
+@pytest.mark.parametrize("text,nm", [
+    ("Brushed 24V DC Gear Motor 22Kg.cm/6.4RPM w/ 720:1 Gearbox", 2.157),
+    ("DC Gearmotor, 20 in-lb Max. Torque, 139 RPM", 2.260),
+    ("1/4 Hp, 125 Rpm, 20:1, 419 Lb-in", 47.34),
+    ("150 ft-lbs worm gear reducer", 203.4),
+    ("Gearmotor 1200 Nm output at 20 rpm", 1200.0),
+    ("rated torque: 2,5 N\u00b7m", 2.5),
+])
+def test_listed_torque_in_seller_units(text, nm):
+    assert round(listed_max_torque_nm(text), 1) == round(nm, 1)
+
+
+def test_no_torque_stated():
+    assert listed_max_torque_nm("240 Series Super Sealed Industrial DC Gear Motor") is None
+    assert listed_max_torque_nm("100 mm shaft, 5 nmax") is None
+
+
+class SmallListingsProvider(SearchProvider):
+    """Incomplete listings: two state a torque far below the need, one states none."""
+    def search(self, query, limit=10):
+        base = {"manufacturer": None, "voltage_v": None, "power_w": None, "nominal_speed_rpm": None,
+                "nominal_torque_nm": None, "gear_ratio": None, "efficiency": None, "source": "test"}
+        return [
+            {**base, "product_name": "Brushed 24V DC Gear Motor 22Kg.cm/6.4RPM w/ 720:1 Gearbox",
+             "part_number": "SMALL-1", "product_url": "https://www.example-motors.com/small-1"},
+            {**base, "product_name": "DC Gearmotor, 20 in-lb Max. Torque, 139 RPM",
+             "part_number": "SMALL-2", "product_url": "https://www.example-motors.com/small-2"},
+            {**base, "product_name": "Industrial helical gear motor 230 V",
+             "part_number": "UNKNOWN-1", "product_url": "https://www.example-motors.com/unknown-1"},
+        ]
+
+
+def test_listings_stating_too_little_torque_are_dropped(db_session):
+    results = discover_and_evaluate_components(
+        db=db_session, required_speed_rpm=21.0, required_torque_nm=733.0, service_factor=1.75,
+        max_voltage_v=230.0, provider=SmallListingsProvider(), top_n=5)
+    parts = {x["part_number"] for x in results}
+    assert "SMALL-1" not in parts and "SMALL-2" not in parts
+    assert "UNKNOWN-1" in parts      # no torque stated: kept, shown as data incomplete

@@ -29,7 +29,8 @@
         $("rh-title").textContent = TITLES[kind]();
         $("rh-meta").innerHTML =
             `Date: <strong>${esc(now.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" }))}</strong>` +
-            ` · Units shown: <strong>${esc(units?.selectedOptions[0]?.text || "SI")}</strong>`;
+            ` · Units shown: <strong>${esc(units?.selectedOptions[0]?.text || "SI")}</strong>` +
+            (window.Standards && Standards.summaryText() ? ` · <strong>${esc(Standards.summaryText())}</strong>` : "");
         const question = ($("sz-ai-text")?.value || "").trim();
         $("rh-question").innerHTML = question
             ? `<div class="rh-label">Question / description</div><div class="rh-qtext">${esc(question)}</div>` : "";
