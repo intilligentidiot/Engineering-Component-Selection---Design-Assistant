@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 
 from app.ai.sizing_parser import get_sizing_parser, SizingParseResult, ProviderError, _norm, _MACHINE_NAMES
 from app.engine.method_eval import MethodPlan, validate_plan
-from app.engine.project import ProjectPlan, validate_project, shredder_template, map_requested
+from app.engine.project import ProjectPlan, repair_project, shredder_template, map_requested
 from app.engine.conveyor_template import bulk_conveyor_template
 
 logger = logging.getLogger(__name__)
@@ -267,7 +267,9 @@ PROJECT_INSTRUCTION = (
     "Rules: "
     "1) Use kind 'motor_selection' for choosing the motor + gearbox (link required_speed_rpm, required_torque_nm, "
     "service_factor, max_voltage_v) and kind 'bearing_life' for rolling bearings (link radial_load_n, speed_rpm and "
-    "required_life_h and/or dynamic_rating_kn; set bearing_type). Use kind 'formula' for everything else. "
+    "required_life_h and/or dynamic_rating_kn; set bearing_type). Every link must name an input or an earlier "
+    "formula result; if no calculation in the plan produces a value a link needs (e.g. the bearing load), add it "
+    "as an input for the engineer to enter. Use kind 'formula' for everything else. "
     "2) Do NOT compute results — only write formulas; the tool evaluates them. Formulas may use only earlier symbols, "
     "numbers, + - * / ** and the listed maths functions, with unit conversion factors written explicitly. "
     "3) Fill an input's value only if the user stated it, with their exact words in quote. "
@@ -455,7 +457,7 @@ def ask(text: str) -> AskResult:
     try:
         if r.topic == "project":
             project = plan_project(text)
-            problems = validate_project(project)
+            problems = repair_project(project)
             if problems:
                 res.status, res.message = "INVALID_PLAN", ("The AI's project plan could not be checked, so it was not used: "
                                                            + " ".join(problems[:3]) + " Try rephrasing the question.")

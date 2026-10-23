@@ -186,6 +186,65 @@ def validate_project(plan: ProjectPlan) -> List[str]:
     return problems
 
 
+# Names and units for module parameters, used when the AI left one unlinked
+LINK_NAMES = {
+    "radial_load_n": ("Radial load on the bearing", "N"),
+    "axial_load_n": ("Axial load on the bearing", "N"),
+    "x_factor": ("Bearing radial load factor X", "-"),
+    "y_factor": ("Bearing axial load factor Y", "-"),
+    "speed_rpm": ("Bearing shaft speed", "rpm"),
+    "dynamic_rating_kn": ("Bearing dynamic load rating C", "kN"),
+    "required_life_h": ("Required bearing life", "h"),
+    "required_speed_rpm": ("Required output speed", "rpm"),
+    "required_torque_nm": ("Required output torque", "N·m"),
+    "peak_torque_nm": ("Peak output torque", "N·m"),
+    "service_factor": ("Service factor", "-"),
+    "max_voltage_v": ("Maximum supply voltage", "V"),
+}
+_ASK_HINT = "Not worked out by this plan: enter it from your design or a separate calculation."
+
+
+def repair_project(plan: ProjectPlan) -> List[str]:
+    """Make an AI plan usable instead of rejecting it whole. Nothing is guessed:
+    a checked-module value the AI left unlinked becomes an input the engineer
+    must enter, and a calculation that still cannot be checked is left out with
+    a note. Returns the problems left (empty when the plan can be used)."""
+    # Module calculations define no symbols, so running them last never breaks a formula
+    plan.calculations = ([c for c in plan.calculations if c.kind == "formula"] +
+                         [c for c in plan.calculations if c.kind != "formula"])
+    defined = set(CONSTS) | {i.symbol for i in plan.inputs}
+    for c in plan.calculations:
+        if c.kind == "formula":
+            defined |= {s.symbol for s in c.steps}
+    for c in plan.calculations:
+        if c.kind not in LINK_PARAMS:
+            continue
+        have = {l.param for l in c.links}
+        for param in sorted(REQUIRED_LINKS[c.kind] - have):
+            sym = re.sub(r"\W", "_", f"{c.id}_{param}")
+            c.links.append(Link(param=param, symbol=sym))
+        for l in c.links:
+            if l.symbol not in defined and _SYMBOL.match(l.symbol) and l.symbol not in FUNCS:
+                name, unit = LINK_NAMES.get(l.param, (l.param, "-"))
+                plan.inputs.append(ProjectInput(symbol=l.symbol, name=f"{name} ({c.title})", unit=unit,
+                                                source_hint=_ASK_HINT))
+                defined.add(l.symbol)
+
+    for _ in range(len(plan.calculations) + 1):
+        problems = validate_project(plan)
+        if not problems:
+            return []
+        broken = [c for c in plan.calculations if any(f"'{c.title}'" in p for p in problems)]
+        if not broken:
+            return problems
+        for c in broken:
+            reason = next(p for p in problems if f"'{c.title}'" in p).replace(f"'{c.title}': ", "").replace(f"'{c.title}' ", "")
+            plan.limitations.append(f"Left out: '{c.title}' — the AI's version could not be checked ({reason})")
+        gone = {id(c) for c in broken}
+        plan.calculations = [c for c in plan.calculations if id(c) not in gone]
+    return validate_project(plan)
+
+
 _STOP = {"the", "of", "a", "an", "and", "for", "to", "at", "on", "in", "required", "total", "value", "values"}
 
 

@@ -254,3 +254,45 @@ def test_broken_estimate_formula_is_rejected():
     m_B = next(i for i in p.inputs if i.symbol == "m_B")
     m_B.estimate.expression = "B_e * unknown_thing"
     assert any("unknown_thing" in x for x in validate_project(p))
+
+
+# ── AI plans are repaired, not thrown away (hydraulic press feedback) ─────
+
+from app.engine.project import ProjectPlan, ProjectInput, repair_project
+
+
+def _press_plan():
+    return ProjectPlan(
+        title="Portable 10 t hydraulic press", machine="portable 10 tonne hydraulic press", summary="x",
+        inputs=[ProjectInput(symbol="F_t", name="Press force", unit="t", source_hint="user", value=10, quote="10 tonne"),
+                ProjectInput(symbol="p", name="System pressure", unit="MPa", source_hint="pump datasheet", typical_value=20)],
+        calculations=[
+            # a bearing check with no links at all — the case seen live
+            ProjectCalc(id="pump_bearing", title="Pump Shaft Bearing Life", purpose="x", kind="bearing_life", bearing_type="ball"),
+            ProjectCalc(id="bore", title="Cylinder bore", purpose="x", steps=[
+                PlanStep(symbol="F_N", name="Force", unit="N", expression="F_t * 1000 * 9.81"),
+                PlanStep(symbol="d_bore", name="Bore", unit="mm", expression="sqrt(4 * F_N / (pi * p))")]),
+            ProjectCalc(id="frame", title="Frame stress", purpose="x", steps=[
+                PlanStep(symbol="sigma", name="Stress", unit="MPa", expression="F_N / A_col")]),   # A_col never defined
+        ])
+
+
+def test_ai_plan_missing_module_links_become_inputs():
+    plan = _press_plan()
+    assert repair_project(plan) == []
+    ids = [c.id for c in plan.calculations]
+    assert ids == ["bore", "pump_bearing"]                       # broken one left out, module check runs last
+    asked = {i.symbol: i for i in plan.inputs}
+    assert "pump_bearing_radial_load_n" in asked and "pump_bearing_speed_rpm" in asked
+    assert asked["pump_bearing_radial_load_n"].value is None    # asked for, never guessed
+    assert asked["pump_bearing_speed_rpm"].unit == "rpm"
+    assert any("Frame stress" in l and "Left out" in l for l in plan.limitations)
+    r = evaluate_project(plan, {"F_t": 10, "p": 20, "pump_bearing_radial_load_n": 500, "pump_bearing_speed_rpm": 1450})
+    assert r.status == "EVALUATED"
+    assert round(_results(r)["d_bore"], 1) == round(math.sqrt(4 * 98100 / (math.pi * 20)), 1)
+
+
+def test_ai_plan_with_nothing_usable_is_still_rejected():
+    plan = _press_plan()
+    plan.calculations = [plan.calculations[2]]
+    assert repair_project(plan)        # problems remain → not used
