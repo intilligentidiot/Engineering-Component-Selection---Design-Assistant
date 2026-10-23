@@ -106,7 +106,7 @@ def test_ai_project_value_must_be_in_text(monkeypatch):
     planned = MagicMock(); planned.parsed = plan
     with patch("app.ai.gemini_parser.genai") as genai:
         genai.Client.return_value.models.generate_content.side_effect = [routing, planned]
-        r = ask("new shredder project at 20 rpm")
+        r = ask("new pelletiser project at 20 rpm")
     by = {i.symbol: i for i in r.project.inputs}
     assert r.project.origin == "AI"
     assert by["n"].value == 20 and by["D"].value is None
@@ -296,3 +296,43 @@ def test_ai_plan_with_nothing_usable_is_still_rejected():
     plan = _press_plan()
     plan.calculations = [plan.calculations[2]]
     assert repair_project(plan)        # problems remain → not used
+
+
+# ── Cost: built-in machines and repeated questions do not call the AI ─────
+
+def test_builtin_machines_skip_the_ai(monkeypatch):
+    monkeypatch.setenv("AI_PROVIDER", "gemini")
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    with patch("app.ai.gemini_parser.genai") as genai:
+        r1 = ask("twin-shaft plastic shredder, 300 mm rotor, 20 rpm")
+        r2 = ask("belt conveyor for iron ore, 200 t/h, belt width 800 mm")
+    assert genai.Client.return_value.models.generate_content.call_count == 0
+    assert r1.project.origin == "TEMPLATE" and r2.project is not None
+
+
+def test_sorting_call_has_no_thinking_and_answers_are_reused(monkeypatch):
+    from app.ai import assistant
+    assistant._CACHE.clear()
+    monkeypatch.setenv("AI_PROVIDER", "gemini")
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    monkeypatch.delenv("GEMINI_MODEL", raising=False)          # default gemini-2.5-flash
+    plan = shredder_template(); plan.origin = "TEMPLATE"
+    routing = MagicMock(); routing.parsed = assistant.TopicRouting(topic="project", reason="x")
+    planned = MagicMock(); planned.parsed = plan
+    with patch("app.ai.gemini_parser.genai") as genai:
+        gen = genai.Client.return_value.models.generate_content
+        gen.side_effect = [routing, planned]
+        first = ask("new pelletiser project at 20 rpm")
+        again = ask("new pelletiser project at 20 rpm")       # same question: answered from memory
+    assert gen.call_count == 2
+    budgets = [c.kwargs["config"].thinking_config.thinking_budget for c in gen.call_args_list]
+    assert budgets == [0, assistant.GEMINI_PLAN_THINKING]      # sorting: no thinking; plan: capped
+    assert again.project.title == first.project.title
+    assistant._CACHE.clear()
+
+
+def test_older_gemini_models_get_no_thinking_setting(monkeypatch):
+    from app.ai import assistant
+    from google.genai import types
+    assert assistant._gemini_thinking("gemini-2.0-flash-lite", "off", types) is None
+    assert assistant._gemini_thinking("gemini-2.5-pro", "off", types).thinking_budget == 128

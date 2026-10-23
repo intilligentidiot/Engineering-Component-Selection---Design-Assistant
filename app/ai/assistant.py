@@ -18,6 +18,7 @@ rule-based and cannot build methods for new topics.
 import os
 import re
 import logging
+from collections import OrderedDict
 from typing import Optional, List, Dict, Any, Type
 
 from pydantic import BaseModel, Field
@@ -40,11 +41,58 @@ def _provider() -> str:
     return os.environ.get("AI_PROVIDER", "mock").strip().lower()
 
 
-def call_structured(schema: Type[BaseModel], system: str, text: str) -> BaseModel:
+# Same question, same instructions → same answer: repeated questions (e.g. while testing)
+# are answered from memory instead of paying the AI again. Kept small; lost on restart.
+_CACHE: "OrderedDict[tuple, BaseModel]" = OrderedDict()
+_CACHE_MAX = 256
+
+
+def call_structured(schema: Type[BaseModel], system: str, text: str, thinking: str = "normal") -> BaseModel:
+    """thinking: 'off' for simple sorting/reading calls (no paid private reasoning),
+    'normal' for plans (a capped amount)."""
+    key = (_provider(), _model_name(), schema.__name__, hash(system), thinking, text.strip())
+    if key in _CACHE:
+        _CACHE.move_to_end(key)
+        return _CACHE[key].model_copy(deep=True)
+    out = _call_structured(schema, system, text, thinking)
+    _CACHE[key] = out.model_copy(deep=True)
+    while len(_CACHE) > _CACHE_MAX:
+        _CACHE.popitem(last=False)
+    return out
+
+
+def _model_name() -> str:
+    p = _provider()
+    if p == "gemini":
+        return os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+    if p == "openai":
+        return os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+    if p == "claude":
+        return os.environ.get("CLAUDE_MODEL", "")
+    return ""
+
+
+# Cap on Gemini 2.5 private reasoning for plans (tokens). Plans are checked and
+# calculated by the tool, so a long private reasoning adds cost but little value.
+GEMINI_PLAN_THINKING = 4096
+
+
+def _gemini_thinking(model: str, thinking: str, types):
+    m = model.lower()
+    if "2.5" in m:
+        if thinking == "off":
+            return types.ThinkingConfig(thinking_budget=128 if "pro" in m else 0)   # 2.5 Pro cannot switch it off
+        return types.ThinkingConfig(thinking_budget=GEMINI_PLAN_THINKING)
+    if m.startswith("gemini-3") and thinking == "off":
+        return types.ThinkingConfig(thinking_level="low")
+    return None   # older models do not think; newer ones keep their default for plans
+
+
+def _call_structured(schema: Type[BaseModel], system: str, text: str, thinking: str) -> BaseModel:
     provider = _provider()
     if provider == "claude":
         from app.ai.claude_client import claude_structured
-        return claude_structured(schema, system, text)
+        return claude_structured(schema, system, text, effort="low" if thinking == "off" else None)
     if provider == "gemini":
         key = os.environ.get("GEMINI_API_KEY")
         if not key:
@@ -53,10 +101,13 @@ def call_structured(schema: Type[BaseModel], system: str, text: str) -> BaseMode
         if not gp._GENAI_AVAILABLE:
             raise ProviderError("ERROR_CONFIGURATION_MISSING", "google-genai SDK is not installed.")
         client = gp.genai.Client(api_key=key)
-        resp = client.models.generate_content(
-            model=os.environ.get("GEMINI_MODEL", "gemini-2.5-flash"), contents=text,
-            config=gp.genai_types.GenerateContentConfig(system_instruction=system, response_mime_type="application/json",
-                                                        response_schema=schema, temperature=0.0))
+        model = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+        cfg = dict(system_instruction=system, response_mime_type="application/json", response_schema=schema, temperature=0.0)
+        tc = _gemini_thinking(model, thinking, gp.genai_types)
+        if tc is not None:
+            cfg["thinking_config"] = tc
+        resp = client.models.generate_content(model=model, contents=text,
+                                              config=gp.genai_types.GenerateContentConfig(**cfg))
         if getattr(resp, "parsed", None) is not None:
             return resp.parsed
         import json
@@ -129,11 +180,16 @@ def _mock_route(text: str) -> TopicRouting:
     return TopicRouting(topic="general", reason="Your question is not motor sizing or bearing life.")
 
 
+def _builtin_plan(text: str) -> bool:
+    """Machines with a hand-checked built-in plan: no AI call is needed (or paid) for them."""
+    return bool(_PROJECT_RE.search(text) or (_CONVEYOR_RE.search(text) and _BULK_RE.search(text)))
+
+
 def route(text: str) -> TopicRouting:
-    if _provider() == "mock":
+    if _provider() == "mock" or _builtin_plan(text):
         return _mock_route(text)
     try:
-        r = call_structured(TopicRouting, ROUTER_INSTRUCTION, text)
+        r = call_structured(TopicRouting, ROUTER_INSTRUCTION, text, thinking="off")
         if r.topic in TOPICS:
             return r
     except Exception as e:  # fall back to rules rather than failing the request
@@ -210,7 +266,7 @@ class ExtractedField(BaseModel):
 
 
 def extract_bearing(text: str) -> List[ExtractedField]:
-    ex = _mock_bearing(text) if _provider() == "mock" else call_structured(BearingExtraction, BEARING_INSTRUCTION, text)
+    ex = _mock_bearing(text) if _provider() == "mock" else call_structured(BearingExtraction, BEARING_INSTRUCTION, text, thinking="off")
     quotes = {q.field: q.quote for q in ex.quotes}
     norm_text = _norm(text)
     out = []
@@ -416,7 +472,7 @@ def plan_project(text: str) -> ProjectPlan:
 
 
 def _plan_project(text: str) -> ProjectPlan:
-    if _provider() == "mock":
+    if _provider() == "mock" or _builtin_plan(text):
         return _mock_project(text)
     plan = call_structured(ProjectPlan, PROJECT_INSTRUCTION, text)
     plan.origin = "AI"

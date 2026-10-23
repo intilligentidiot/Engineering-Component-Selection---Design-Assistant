@@ -35,7 +35,8 @@ _EFFORTS = ("low", "medium", "high", "xhigh", "max")
 
 
 def claude_structured(schema: Type[BaseModel], system: str, text: str,
-                      api_key: Optional[str] = None, model: Optional[str] = None) -> BaseModel:
+                      api_key: Optional[str] = None, model: Optional[str] = None,
+                      effort: Optional[str] = None) -> BaseModel:
     key = api_key or os.environ.get("ANTHROPIC_API_KEY")
     if not key:
         raise ProviderError("ERROR_CONFIGURATION_MISSING", "ANTHROPIC_API_KEY is missing — the AI reader is unavailable.")
@@ -43,7 +44,7 @@ def claude_structured(schema: Type[BaseModel], system: str, text: str,
         raise ProviderError("ERROR_CONFIGURATION_MISSING", "anthropic SDK is not installed. Run: pip install anthropic")
 
     model = model or os.environ.get("CLAUDE_MODEL", DEFAULT_MODEL)
-    effort = os.environ.get("CLAUDE_EFFORT", "medium").strip().lower()
+    effort = (effort or os.environ.get("CLAUDE_EFFORT", "medium")).strip().lower()
     if effort not in _EFFORTS:
         effort = "medium"
     logger.info("[AI Provider] Claude | model=%s effort=%s", model, effort)

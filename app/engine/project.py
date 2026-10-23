@@ -437,7 +437,7 @@ def shredder_template(machine: str = "Shredding machine") -> ProjectPlan:
             _i("L", "Bearing span (distance between the two shaft bearings)", "mm", "Your shaft / frame design"),
             _i("tau_allow", "Allowable shear stress of the shaft steel", "MPa",
                "Shaft material: e.g. 0.3 × yield strength (ASME shaft code), reduced by 25 % where there is a keyway",
-               estimate=ASME_SHEAR_ESTIMATE),
+               estimate=ASME_SHEAR_ESTIMATE.model_copy(deep=True)),
             _i("life_req", "Required bearing life", "h", "Your target service life (running hours)", optional=True),
             _i("C", "Bearing dynamic load rating (if a bearing is already chosen)", "kN", "Bearing catalogue", optional=True),
             _i("V", "Supply voltage (maximum)", "V", "Your power supply"),

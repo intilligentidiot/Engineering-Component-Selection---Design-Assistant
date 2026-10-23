@@ -536,6 +536,14 @@ class MockSizingParser(SizingRequirementParser):
 # Real providers (structured output, same SDKs as Stage 7.2)
 # ─────────────────────────────────────────────────────────────
 
+def _no_thinking(model: str, types) -> dict:
+    """Reading values out of the text needs no (paid) private reasoning on Gemini 2.5."""
+    m = model.lower()
+    if "2.5" in m:
+        return {"thinking_config": types.ThinkingConfig(thinking_budget=128 if "pro" in m else 0)}
+    return {}
+
+
 class GeminiSizingParser(SizingRequirementParser):
     name = "gemini"
 
@@ -554,7 +562,8 @@ class GeminiSizingParser(SizingRequirementParser):
             model=self._model, contents=text,
             config=gp.genai_types.GenerateContentConfig(
                 system_instruction=SYSTEM_INSTRUCTION, response_mime_type="application/json",
-                response_schema=SizingExtraction, temperature=0.0),
+                response_schema=SizingExtraction, temperature=0.0,
+                **_no_thinking(self._model, gp.genai_types)),
         )
         if getattr(resp, "parsed", None) is not None:
             return resp.parsed
