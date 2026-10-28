@@ -170,5 +170,28 @@ Region notes shown today (`static/js/standards.js`, `REGION_NOTES`) — **please
 | ASME shaft-design approach | Europe (EU) | European projects often use DIN 743 for shaft strength, which also covers fatigue. |
 
 Every other country / check combination shows only the general "confirm it is accepted" note.
+(An extra note was added for Australia: shafts — "Australian projects often use AS 1403 for rotating steel shafts.")
+
+**Customer's required standard list.** After choosing a country, the engineer picks the customer's standard from
+that country's list only (or types one under "Other"). The lists are in `static/js/standards.js` (`STANDARDS`) —
+**please check each country's list, add the standards you are asked for most, and remove any you never use**:
+
+- USA: ASME B106.1M, ANSI/ABMA Std 9 and 11, ANSI/AGMA 2001 and 6013, NEMA MG 1, CEMA (bulk conveyors), AISC 360,
+  AWS D1.1, ASME BTH-1, ASME B30, ASME BPVC VIII, ANSI B11.0, NFPA 79, OSHA 29 CFR 1910 Subpart O
+- UK: BS EN ISO 12100, BS EN ISO 13849-1, BS EN 60204-1, BS EN 60034-1, BS ISO 281, BS ISO 6336, BS EN 1993-1-1,
+  BS EN 1090-2, BS EN 13001, BS EN 620, BS EN 13445, Supply of Machinery (Safety) Regulations 2008
+- Australia: AS 1403, AS 4024.1, AS 1755, AS 1418, AS 4100, AS/NZS 5131, AS/NZS 1554.1, AS/NZS 1170, AS 1210, AS/NZS 3000
+- New Zealand: AS/NZS 4024.1, NZS 3404, AS/NZS 5131, AS/NZS 1554.1, AS/NZS 1170, AS/NZS 1200, AS/NZS 3000
+- India: IS 800, IS 816, IS 875, IS 807, IS 3177, IS 11592, IS 325, IS 2825
+- Canada: CSA Z432, CSA S16, CSA W59, CSA B167, CSA B51, CSA C22.1
+- Europe (EU): Machinery Regulation (EU) 2023/1230, Machinery Directive 2006/42/EC, EN ISO 12100, EN ISO 13849-1,
+  EN 60204-1, DIN 743, ISO 281, ISO 6336, DIN 3990, ISO 5048, DIN 22101, VDI 2230, DIN 6892, EN 1993-1-1, EN 1090-2,
+  EN 13001, EN 620, EN 13445, EN 60034-1
+- Middle East: Saudi Aramco Engineering Standards (SAES), ISO 12100, IEC 60204-1, ISO 281, ISO 6336, ASME BPVC VIII,
+  AISC 360, AWS D1.1
+- Other (international): ISO 12100, ISO 13849-1, IEC 60204-1, IEC 60034-1, ISO 281, ISO 6336, ISO 5048, ISO 4301
+
+Choosing a standard does not change any calculation: it is recorded on the project and the report, and every check
+asks the engineer to confirm it meets that standard.
 Planned next: a standards table the engineer fills in per part and country, and passing the country and customer
 standard to the AI so AI-built plans follow them.

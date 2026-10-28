@@ -11,7 +11,7 @@
     <link rel="icon" type="image/png" sizes="128x128" href="/static/img/favicon-128.png">
     <link rel="apple-touch-icon" href="/static/img/favicon-128.png">
     <link rel="stylesheet" href="/static/css/style.css?v=9.7">
-    <link rel="stylesheet" href="/static/css/theme.css?v=1.5">
+    <link rel="stylesheet" href="/static/css/theme.css?v=1.6">
     <script>
         // Apply the saved theme before the page draws (light by default)
         (function () {
@@ -99,7 +99,8 @@
                                     <select id="std-country" title="Country the machine is designed for"></select>
                                 </label>
                                 <label class="std-field std-grow"><span>Customer's required standard <span class="std-opt">(optional)</span></span>
-                                    <input type="text" id="std-customer" maxlength="120" placeholder="e.g. AS 4100, ASME B106.1M, BS EN 13001">
+                                    <select id="std-customer" title="Standards for the chosen country only"></select>
+                                    <input type="text" id="std-customer-other" maxlength="120" hidden placeholder="Type the standard, e.g. company spec or edition">
                                 </label>
                             </div>
                             <div id="sz-ai-feedback" hidden></div>
@@ -377,7 +378,7 @@
            every number is calculated by the tool and shown step by step</p>
     </footer>
 
-    <script src="/static/js/standards.js?v=1.0"></script>
+    <script src="/static/js/standards.js?v=1.1"></script>
     <script src="/static/js/units.js?v=9.7"></script>
     <script src="/static/js/main.js?v=9.7"></script>
     <script src="/static/js/sizing.js?v=9.7"></script>

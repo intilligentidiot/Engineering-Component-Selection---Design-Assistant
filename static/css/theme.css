@@ -149,8 +149,11 @@ select.u-sel { font-size: 0.85rem; padding: 0.1rem 0.25rem; border-color: var(--
 .std-row { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 0.75rem; }
 .std-field { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.8rem; font-weight: 600; color: var(--silver-400); }
 .std-field.std-grow { flex: 1; min-width: 14rem; }
+.std-field select:disabled { opacity: 0.6; cursor: not-allowed; }
+.std-field #std-customer-other { margin-top: 0.35rem; }
 .std-opt { font-weight: 400; color: var(--silver-600); }
 .std-field select, .std-field input {
+    max-width: 100%;
     background: var(--dark-700); color: var(--silver-100); border: 1px solid var(--dark-500); border-radius: var(--radius-sm);
     padding: 0.5rem 0.6rem; font-family: var(--font); font-size: 0.9rem; min-width: 11rem;
 }

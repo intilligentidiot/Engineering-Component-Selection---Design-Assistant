@@ -1,19 +1,136 @@
 /* Engineering Calculation Assistant — project country and standards.
  *
- * The engineer picks the country the machine is for and, optionally, the
- * standard the customer requires. Every built-in check names the standard it
- * follows; when a country or customer standard is set, each check also says
- * so and asks the engineer to confirm it is accepted for this project.
+ * The engineer picks the country the machine is for, then (optionally) the
+ * standard the customer requires from that country's list only — or types one
+ * that is not listed. Every built-in check names the standard it follows; when
+ * a country or customer standard is set, each check also says so and asks the
+ * engineer to confirm it is accepted for this project.
  * The tool never claims a different standard was applied.
  *
- * REGION_NOTES are pending engineering review (docs/ENGINEERING_DEFAULTS_TO_REVIEW.md).
+ * STANDARDS and REGION_NOTES are pending engineering review
+ * (docs/ENGINEERING_DEFAULTS_TO_REVIEW.md, section 12).
  */
 
 (() => {
     const $ = id => document.getElementById(id);
     const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-    const COUNTRIES = ["USA", "UK", "Australia", "New Zealand", "India", "Canada", "Europe (EU)", "Middle East", "Other"];
+    // Commonly specified machine-design standards, per country: [code, what it covers]
+    const STANDARDS = {
+        "USA": [
+            ["ASME B106.1M", "Design of transmission shafting"],
+            ["ANSI/ABMA Std 9", "Load ratings and fatigue life — ball bearings"],
+            ["ANSI/ABMA Std 11", "Load ratings and fatigue life — roller bearings"],
+            ["ANSI/AGMA 2001", "Rating of spur and helical gear teeth"],
+            ["ANSI/AGMA 6013", "Industrial enclosed gear drives"],
+            ["NEMA MG 1", "Motors and generators"],
+            ["CEMA — Belt Conveyors for Bulk Materials", "Bulk belt conveyor design"],
+            ["AISC 360", "Structural steel"],
+            ["AWS D1.1", "Structural welding — steel"],
+            ["ASME BTH-1", "Below-the-hook lifting devices"],
+            ["ASME B30", "Cranes, hoists and rigging (safety)"],
+            ["ASME BPVC Section VIII", "Pressure vessels"],
+            ["ANSI B11.0", "Safety of machinery"],
+            ["NFPA 79", "Electrical standard for industrial machinery"],
+            ["OSHA 29 CFR 1910 Subpart O", "Machinery and machine guarding"],
+        ],
+        "UK": [
+            ["BS EN ISO 12100", "Safety of machinery — risk assessment"],
+            ["BS EN ISO 13849-1", "Safety-related parts of control systems"],
+            ["BS EN 60204-1", "Electrical equipment of machines"],
+            ["BS EN 60034-1", "Rotating electrical machines — rating"],
+            ["BS ISO 281", "Rolling bearings — rating life"],
+            ["BS ISO 6336", "Spur and helical gears — load capacity"],
+            ["BS EN 1993-1-1 (Eurocode 3)", "Design of steel structures"],
+            ["BS EN 1090-2", "Execution of steel structures"],
+            ["BS EN 13001", "Cranes — general design"],
+            ["BS EN 620", "Belt conveyors for bulk materials — safety"],
+            ["BS EN 13445", "Unfired pressure vessels"],
+            ["Supply of Machinery (Safety) Regulations 2008", "UK machinery law (UKCA)"],
+        ],
+        "Australia": [
+            ["AS 1403", "Design of rotating steel shafts"],
+            ["AS 4024.1", "Safety of machinery"],
+            ["AS 1755", "Conveyors — safety requirements"],
+            ["AS 1418", "Cranes, hoists and winches"],
+            ["AS 4100", "Steel structures"],
+            ["AS/NZS 5131", "Structural steelwork — fabrication and erection"],
+            ["AS/NZS 1554.1", "Structural steel welding"],
+            ["AS/NZS 1170", "Structural design actions (loads)"],
+            ["AS 1210", "Pressure vessels"],
+            ["AS/NZS 3000", "Electrical installations (wiring rules)"],
+        ],
+        "New Zealand": [
+            ["AS/NZS 4024.1", "Safety of machinery"],
+            ["NZS 3404", "Steel structures"],
+            ["AS/NZS 5131", "Structural steelwork — fabrication and erection"],
+            ["AS/NZS 1554.1", "Structural steel welding"],
+            ["AS/NZS 1170", "Structural design actions (loads)"],
+            ["AS/NZS 1200", "Pressure equipment"],
+            ["AS/NZS 3000", "Electrical installations (wiring rules)"],
+        ],
+        "India": [
+            ["IS 800", "General construction in steel"],
+            ["IS 816", "Metal arc welding for general construction in mild steel"],
+            ["IS 875", "Design loads for buildings and structures"],
+            ["IS 807", "Design of cranes and hoists"],
+            ["IS 3177", "Electric overhead travelling and gantry cranes"],
+            ["IS 11592", "Selection and design of belt conveyors"],
+            ["IS 325", "Three-phase induction motors"],
+            ["IS 2825", "Unfired pressure vessels"],
+        ],
+        "Canada": [
+            ["CSA Z432", "Safeguarding of machinery"],
+            ["CSA S16", "Design of steel structures"],
+            ["CSA W59", "Welded steel construction"],
+            ["CSA B167", "Overhead travelling cranes"],
+            ["CSA B51", "Boilers, pressure vessels and pressure piping"],
+            ["CSA C22.1", "Canadian Electrical Code, Part I"],
+        ],
+        "Europe (EU)": [
+            ["Machinery Regulation (EU) 2023/1230", "EU machinery law (replaces Directive 2006/42/EC)"],
+            ["Machinery Directive 2006/42/EC", "EU machinery law (CE marking)"],
+            ["EN ISO 12100", "Safety of machinery — risk assessment"],
+            ["EN ISO 13849-1", "Safety-related parts of control systems"],
+            ["EN 60204-1", "Electrical equipment of machines"],
+            ["DIN 743", "Shafts — load capacity"],
+            ["ISO 281", "Rolling bearings — rating life"],
+            ["ISO 6336", "Spur and helical gears — load capacity"],
+            ["DIN 3990", "Gears — load capacity"],
+            ["ISO 5048", "Belt conveyors — power and tensions"],
+            ["DIN 22101", "Belt conveyors for bulk materials"],
+            ["VDI 2230", "Bolted joints"],
+            ["DIN 6892", "Feather keys — calculation"],
+            ["EN 1993-1-1 (Eurocode 3)", "Design of steel structures"],
+            ["EN 1090-2", "Execution of steel structures"],
+            ["EN 13001", "Cranes — general design"],
+            ["EN 620", "Belt conveyors for bulk materials — safety"],
+            ["EN 13445", "Unfired pressure vessels"],
+            ["EN 60034-1", "Rotating electrical machines — rating"],
+        ],
+        "Middle East": [
+            ["Saudi Aramco Engineering Standards (SAES)", "Saudi Aramco projects"],
+            ["ISO 12100", "Safety of machinery — risk assessment"],
+            ["IEC 60204-1", "Electrical equipment of machines"],
+            ["ISO 281", "Rolling bearings — rating life"],
+            ["ISO 6336", "Spur and helical gears — load capacity"],
+            ["ASME BPVC Section VIII", "Pressure vessels"],
+            ["AISC 360", "Structural steel"],
+            ["AWS D1.1", "Structural welding — steel"],
+        ],
+        "Other": [
+            ["ISO 12100", "Safety of machinery — risk assessment"],
+            ["ISO 13849-1", "Safety-related parts of control systems"],
+            ["IEC 60204-1", "Electrical equipment of machines"],
+            ["IEC 60034-1", "Rotating electrical machines — rating"],
+            ["ISO 281", "Rolling bearings — rating life"],
+            ["ISO 6336", "Spur and helical gears — load capacity"],
+            ["ISO 5048", "Belt conveyors — power and tensions"],
+            ["ISO 4301", "Cranes — classification"],
+        ],
+    };
+    const COUNTRIES = Object.keys(STANDARDS);
+    const OTHER = "__other__";
 
     // Where a project's country commonly uses a different standard for the same check
     const REGION_NOTES = [
@@ -23,7 +140,8 @@
             "USA": "US projects usually follow the CEMA method (Belt Conveyors for Bulk Materials). It differs from ISO 5048, so results will not match exactly.",
             "Canada": "Canadian projects often follow the CEMA method (Belt Conveyors for Bulk Materials). It differs from ISO 5048, so results will not match exactly." } },
         { match: /ASME/i, notes: {
-            "Europe (EU)": "European projects often use DIN 743 for shaft strength, which also covers fatigue." } },
+            "Europe (EU)": "European projects often use DIN 743 for shaft strength, which also covers fatigue.",
+            "Australia": "Australian projects often use AS 1403 for rotating steel shafts." } },
     ];
 
     const KEY_C = "tmd.country", KEY_S = "tmd.custstd";
@@ -31,7 +149,9 @@
     const save = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* private mode: not remembered */ } };
 
     function get() {
-        return { country: ($("std-country")?.value || "").trim(), customer: ($("std-customer")?.value || "").trim() };
+        const sel = $("std-customer"), other = $("std-customer-other");
+        const customer = sel?.value === OTHER ? (other?.value || "") : (sel?.value || "");
+        return { country: ($("std-country")?.value || "").trim(), customer: customer.trim() };
     }
 
     // Note under one calculation. standard: what the check follows; ai: the AI chose it
@@ -52,17 +172,47 @@
         return [country && `Country: ${country}`, customer && `Customer standard: ${customer}`].filter(Boolean).join(" · ");
     }
 
+    // Fill the standard list with the chosen country's standards only
+    function fillStandards(country, keep) {
+        const sel = $("std-customer"), other = $("std-customer-other");
+        const list = STANDARDS[country] || [];
+        if (!country) {
+            sel.innerHTML = `<option value="">Choose a project country first</option>`;
+            sel.disabled = true;
+        } else {
+            sel.disabled = false;
+            sel.innerHTML = `<option value="">None / not specified</option>` +
+                `<optgroup label="${esc(country)}">` +
+                list.map(([code, what]) => `<option value="${esc(code)}">${esc(code)} — ${esc(what)}</option>`).join("") +
+                `</optgroup><option value="${OTHER}">Other (type it)…</option>`;
+        }
+        if (keep && list.some(([code]) => code === keep)) { sel.value = keep; other.value = ""; }
+        else if (keep && country) { sel.value = OTHER; other.value = keep; }
+        else { sel.value = ""; other.value = ""; }
+        other.hidden = sel.value !== OTHER;
+    }
+
     function init() {
-        const sel = $("std-country"), cust = $("std-customer");
-        if (!sel || !cust) return;
-        sel.innerHTML = `<option value="">Not specified</option>` + COUNTRIES.map(c => `<option>${esc(c)}</option>`).join("");
-        sel.value = COUNTRIES.includes(load(KEY_C)) ? load(KEY_C) : "";
-        cust.value = load(KEY_S);
-        const changed = () => { save(KEY_C, sel.value); save(KEY_S, cust.value.trim()); document.dispatchEvent(new Event("standards-change")); };
-        sel.addEventListener("change", changed);
-        cust.addEventListener("change", changed);
+        const country = $("std-country"), sel = $("std-customer"), other = $("std-customer-other");
+        if (!country || !sel || !other) return;
+        country.innerHTML = `<option value="">Not specified</option>` + COUNTRIES.map(c => `<option>${esc(c)}</option>`).join("");
+        country.value = COUNTRIES.includes(load(KEY_C)) ? load(KEY_C) : "";
+        fillStandards(country.value, load(KEY_S));
+
+        const changed = () => {
+            save(KEY_C, country.value);
+            save(KEY_S, get().customer);
+            document.dispatchEvent(new Event("standards-change"));
+        };
+        country.addEventListener("change", () => { fillStandards(country.value, ""); changed(); });   // a new country starts with no standard
+        sel.addEventListener("change", () => {
+            other.hidden = sel.value !== OTHER;
+            if (sel.value === OTHER) other.focus();
+            changed();
+        });
+        other.addEventListener("change", changed);
     }
 
     document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", init) : init();
-    window.Standards = { get, noteFor, summaryText, COUNTRIES };
+    window.Standards = { get, noteFor, summaryText, COUNTRIES, STANDARDS };
 })();
