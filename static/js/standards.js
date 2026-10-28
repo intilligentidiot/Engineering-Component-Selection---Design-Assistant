@@ -144,6 +144,52 @@
             "Australia": "Australian projects often use AS 1403 for rotating steel shafts." } },
     ];
 
+    // Suggestions: what the question is about -> which listed standards cover it (matched on their description)
+    const TOPICS = [
+        { name: "shafts",     ask: /\bshafts?\b|\baxles?\b|\brotors?\b|\bspindles?\b/i,               covers: /shaft/i },
+        { name: "bearings",   ask: /\bbearings?\b/i,                                                covers: /bearing/i },
+        { name: "gears",      ask: /\bgears?\b|gearbox|\bpinions?\b|\breducers?\b/i,                  covers: /\bgear/i },
+        { name: "conveyors",  ask: /conveyor/i,                                                     covers: /conveyor/i },
+        { name: "lifting",    ask: /\bcranes?\b|\bhoists?\b|\blift(?:s|ing)?\b|\bwinch|rigging|gantry/i, covers: /crane|hoist|lifting/i },
+        { name: "motors",     ask: /\bmotors?\b|shredder|pelleti[sz]er|crusher|\bmixer|\bpumps?\b|\bfans?\b/i, covers: /motor|rotating electrical/i },
+        { name: "structure",  ask: /\bframes?\b|chassis|structur|\bbeams?\b|\bcolumns?\b|platform/i,  covers: /steel structures?|structural steel(?! welding)|construction in steel|design loads|design actions/i },
+        { name: "welding",    ask: /\bweld/i,                                                       covers: /weld/i },
+        { name: "bolts",      ask: /\bbolt/i,                                                       covers: /bolted/i },
+        { name: "keys",       ask: /\bkeys?\b|keyway/i,                                             covers: /\bkeys\b/i },
+        { name: "pressure",   ask: /pressure vessel|\btanks?\b|boiler|\breceivers?\b/i,             covers: /pressure/i },
+        { name: "electrical", ask: /electric|wiring|control panel|\bplc\b/i,                        covers: /electrical/i },
+    ];
+    // Safety / legal standards apply to any machine: suggested as "also check", never as the calculation standard
+    const SAFETY = /safety of machinery|risk assessment|safeguarding|machine guarding|machinery law/i;
+
+    function suggest(text, country) {
+        const list = STANDARDS[country] || [];
+        const topics = TOPICS.filter(t => t.ask.test(text || ""));
+        const design = [], missing = [];
+        topics.forEach(t => {
+            const hits = list.filter(([code, what]) => t.covers.test(what) && !SAFETY.test(what));
+            hits.forEach(h => { if (!design.includes(h)) design.push(h); });
+            if (!hits.length) missing.push(t.name);
+        });
+        const safety = text && text.trim() ? list.filter(([, what]) => SAFETY.test(what)).slice(0, 2) : [];
+        return { design, safety, missing };
+    }
+
+    function renderSuggest() {
+        const box = $("std-suggest"), country = $("std-country")?.value || "";
+        if (!box) return;
+        const { design, safety, missing } = suggest($("sz-ai-text")?.value, country);
+        if (!country || (!design.length && !safety.length && !missing.length)) { box.hidden = true; box.innerHTML = ""; return; }
+        const current = get().customer;
+        const chip = ([code, what], cls = "") =>
+            `<button type="button" class="std-chip ${cls}${code === current ? " is-on" : ""}" data-std="${esc(code)}" title="${esc(what)}">${esc(code)} — ${esc(what)}</button>`;
+        box.innerHTML =
+            (design.length ? `<div><strong>Suggested for your question (${esc(country)}):</strong> click one to use it.<div class="std-chips">${design.map(d => chip(d)).join("")}</div></div>` : "") +
+            (missing.length ? `<div>No ${esc(country)} standard in the list for ${esc(missing.join(", "))} — leave it as None, or choose "Other" and type the one the customer uses.</div>` : "") +
+            (safety.length ? `<div style="margin-top:0.35rem">Also check (safety — no calculations in it):<div class="std-chips">${safety.map(s => chip(s, "is-safety")).join("")}</div></div>` : "");
+        box.hidden = false;
+    }
+
     const KEY_C = "tmd.country", KEY_S = "tmd.custstd";
     const load = k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } };
     const save = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* private mode: not remembered */ } };
@@ -211,8 +257,20 @@
             changed();
         });
         other.addEventListener("change", changed);
+
+        // Suggested standards follow the question text and the country
+        let timer;
+        $("sz-ai-text")?.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(renderSuggest, 300); });
+        document.addEventListener("standards-change", renderSuggest);
+        $("std-suggest")?.addEventListener("click", e => {
+            const b = e.target.closest(".std-chip");
+            if (!b) return;
+            fillStandards(country.value, b.dataset.std);
+            changed();
+        });
+        renderSuggest();
     }
 
     document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", init) : init();
-    window.Standards = { get, noteFor, summaryText, COUNTRIES, STANDARDS };
+    window.Standards = { get, noteFor, summaryText, suggest, COUNTRIES, STANDARDS };
 })();
