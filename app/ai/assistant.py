@@ -311,6 +311,7 @@ def plan_method(text: str, country: str = "", standard: str = "") -> MethodPlan:
             i.value, i.quote = None, None
         if _from_standard(i.typical_note):   # a factor from the standard's tables: the engineer enters it
             i.typical_value = None
+    _add_gap_note(plan, standard)
     return plan
 
 
@@ -327,6 +328,28 @@ def _clean(s: Optional[str]) -> str:
 
 def _from_standard(note: Optional[str]) -> bool:
     return bool(note) and _FROM_COPY in note.lower()
+
+
+# Safety, legal, electrical and procedure standards from the standards list: they give no
+# strength or sizing calculation, so the tool says so itself rather than relying on the AI.
+_NO_DESIGN_METHOD = re.compile(
+    r"4024|12100|13849|60204|\bB11\b|NFPA\s*79|OSHA|Regulations?\b|Directive|Z432|"
+    r"AS/NZS\s*3000|C22\.1|AS\s*1755|EN\s*620|ASME\s*B30\b", re.IGNORECASE)
+
+
+def standard_gap_note(standard: Optional[str]) -> str:
+    standard = _clean(standard)
+    if not standard or not _NO_DESIGN_METHOD.search(standard):
+        return ""
+    return (f"{standard} is a safety, legal or procedure standard — it has no calculation method for this. "
+            f"The method used here is NOT {standard}. Check the design against {standard}'s requirements separately, "
+            f"and ask the customer which design standard applies to the calculations.")
+
+
+def _add_gap_note(plan, standard: Optional[str]) -> None:
+    note = standard_gap_note(standard)
+    if note and note not in plan.limitations:
+        plan.limitations.insert(0, note)
 
 
 def standards_context(country: Optional[str], standard: Optional[str]) -> str:
@@ -347,7 +370,9 @@ def standards_context(country: Optional[str], standard: Optional[str]) -> str:
                 f"Never supply those numbers yourself. "
                 f"c) If {standard} is a safety, legal or procedure standard with no calculation method, or its method "
                 f"relies on detailed rules you cannot reproduce exactly, say so as the first limitation, then use a "
-                f"generally accepted method and state clearly that it is not {standard}.")
+                f"generally accepted method and state clearly that it is not {standard}."
+                + (f" Note: {standard} is a safety, legal or procedure standard — it has no calculation method, "
+                   f"so do not write it in any calculation's standard field." if standard_gap_note(standard) else ""))
     return (f" PROJECT COUNTRY:{where} Prefer calculation methods and standards commonly used there and name them. "
             f"Every factor, coefficient, allowable stress or partial safety factor that comes from the tables, charts "
             f"or clauses of a standard must be an input with value null and NO typical_value, whose source_hint (or "
@@ -510,6 +535,7 @@ def plan_project(text: str, country: str = "", standard: str = "") -> ProjectPla
         items = requested_items(text)
         if items:
             map_requested(plan, items)
+    _add_gap_note(plan, standard)
     return plan
 
 

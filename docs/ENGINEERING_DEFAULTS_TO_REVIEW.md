@@ -199,6 +199,10 @@ coefficient, allowable stress or partial safety factor taken from a standard's t
 "From <standard and clause> — enter from your copy of the standard", with no value filled in (the tool removes any
 number the AI gives for such a factor). For safety / legal / procedure standards, or standards whose detailed rules it
 cannot reproduce, the AI must say so first under Limitations. Built-in checks are not changed by the choice.
+For the safety / legal / electrical / procedure standards in the lists (AS/NZS 4024.1, ISO 12100, ISO 13849-1,
+IEC/EN 60204-1, ANSI B11, NFPA 79, OSHA, machinery regulations and directives, CSA Z432, AS/NZS 3000, CSA C22.1,
+AS 1755, EN 620, ASME B30) the tool itself adds the first limitation: the standard has no calculation method, the
+method used is NOT that standard, and the customer should say which design standard applies. Review this list.
 
 Planned next: a standards table the engineer fills in per part and country; built-in checks to specific standards
 (e.g. AS 1403, DIN 743 shafts) using factors from the engineer's copy.

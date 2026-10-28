@@ -159,3 +159,30 @@ def test_ask_endpoint_accepts_country_and_standard():
     data = client.post("/api/ask", json={"text": "conveyor moving boxes at 0.5 m/s",
                                          "country": "USA", "standard": "ASME B106.1M"}).json()
     assert data["topic"] == "motor_sizing"
+
+
+def test_safety_standard_gets_a_tool_written_warning_even_if_the_ai_forgets(monkeypatch):
+    from app.ai import assistant
+    assistant._CACHE.clear()
+    monkeypatch.setenv("AI_PROVIDER", "gemini")
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    plan = _shaft_plan(inputs=[
+        PlanInput(symbol="T", name="Torque", unit="N·m", value=50, quote="50 Nm"),
+        PlanInput(symbol="tau_allow", name="Allowable shear stress", unit="MPa", typical_value=40)])
+    plan.limitations = ["Static loading only."]
+    routing = MagicMock(); routing.parsed = MagicMock(topic="general", reason="Shaft sizing.")
+    planned = MagicMock(); planned.parsed = plan
+    with patch("app.ai.gemini_parser.genai") as genai:
+        genai.Client.return_value.models.generate_content.side_effect = [routing, planned]
+        r = ask("shaft diameter for 50 Nm torque", country="Australia", standard="AS 4024.1")
+    assert r.plan.limitations[0].startswith("AS 4024.1 is a safety")
+    assert "NOT AS 4024.1" in r.plan.limitations[0]
+    assistant._CACHE.clear()
+
+
+def test_which_standards_have_no_calculation_method():
+    from app.ai.assistant import standard_gap_note
+    for s in ["AS 4024.1", "BS EN ISO 12100", "NFPA 79", "Machinery Directive 2006/42/EC", "CSA Z432", "AS/NZS 3000"]:
+        assert standard_gap_note(s), s
+    for s in ["AS 1403", "DIN 743", "ISO 281", "AS 4100", "ANSI/AGMA 2001", "BS EN 13001", ""]:
+        assert not standard_gap_note(s), s
