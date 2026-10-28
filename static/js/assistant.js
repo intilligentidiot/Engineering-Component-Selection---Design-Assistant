@@ -47,7 +47,8 @@
     // Plan inputs become field definitions too
     const defsFor = () => topic === "bearing_life"
         ? Object.fromEntries(Object.entries(BEARING).map(([k, d]) => [k, { key: k, ...d }]))
-        : Object.fromEntries((plan?.inputs || []).map(i => [i.symbol, { key: i.symbol, label: i.name, unit: i.unit }]));
+        : Object.fromEntries((plan?.inputs || []).map(i => [i.symbol, { key: i.symbol, label: i.name, unit: i.unit,
+            hint: i.typical_value == null && i.typical_note ? i.typical_note : "" }]));
 
     function fieldHtml(d, highlight) {
         const v = values[d.key];

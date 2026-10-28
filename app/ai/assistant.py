@@ -303,13 +303,55 @@ METHOD_INSTRUCTION = (
 )
 
 
-def plan_method(text: str) -> MethodPlan:
-    plan = call_structured(MethodPlan, METHOD_INSTRUCTION, text)
+def plan_method(text: str, country: str = "", standard: str = "") -> MethodPlan:
+    plan = call_structured(MethodPlan, METHOD_INSTRUCTION + standards_context(country, standard), text)
     norm_text = _norm(text)
     for i in plan.inputs:   # a value counts as "given" only if the user's words are really in the text
         if i.value is not None and not (i.quote and _norm(i.quote) in norm_text and re.search(r"\d", i.quote)):
             i.value, i.quote = None, None
+        if _from_standard(i.typical_note):   # a factor from the standard's tables: the engineer enters it
+            i.typical_value = None
     return plan
+
+
+# ─────────────────────────────────────────────────────────────
+# Project country and customer's required standard
+# ─────────────────────────────────────────────────────────────
+
+_FROM_COPY = "enter from your copy"
+
+
+def _clean(s: Optional[str]) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"[\x00-\x1f\x7f]", " ", s or "")).strip()[:120]
+
+
+def _from_standard(note: Optional[str]) -> bool:
+    return bool(note) and _FROM_COPY in note.lower()
+
+
+def standards_context(country: Optional[str], standard: Optional[str]) -> str:
+    """Extra planning rules when the engineer chose a project country and/or the customer's standard.
+    The AI writes formulas only; factors from a paid standard's tables become inputs the engineer enters."""
+    country, standard = _clean(country), _clean(standard)
+    if not country and not standard:
+        return ""
+    where = f" The machine is for {country}." if country else ""
+    if standard:
+        return (f" PROJECT STANDARD:{where} The customer requires {standard}. "
+                f"a) Use {standard}'s calculation method for every calculation it covers and write '{standard}' "
+                f"(with the clause if you know it) in that calculation's standard field; for calculations it does not "
+                f"cover, use another recognised method and name it. "
+                f"b) Every factor, coefficient, allowable stress or partial safety factor that comes from the tables, "
+                f"charts or clauses of a standard must be an input with value null and NO typical_value, whose "
+                f"source_hint (or typical_note) says 'From <standard and clause> — {_FROM_COPY} of the standard'. "
+                f"Never supply those numbers yourself. "
+                f"c) If {standard} is a safety, legal or procedure standard with no calculation method, or its method "
+                f"relies on detailed rules you cannot reproduce exactly, say so as the first limitation, then use a "
+                f"generally accepted method and state clearly that it is not {standard}.")
+    return (f" PROJECT COUNTRY:{where} Prefer calculation methods and standards commonly used there and name them. "
+            f"Every factor, coefficient, allowable stress or partial safety factor that comes from the tables, charts "
+            f"or clauses of a standard must be an input with value null and NO typical_value, whose source_hint (or "
+            f"typical_note) says 'From <standard and clause> — {_FROM_COPY} of the standard'.")
 
 
 # ─────────────────────────────────────────────────────────────
@@ -462,8 +504,8 @@ def requested_items(text: str) -> List[str]:
     return items
 
 
-def plan_project(text: str) -> ProjectPlan:
-    plan = _plan_project(text)
+def plan_project(text: str, country: str = "", standard: str = "") -> ProjectPlan:
+    plan = _plan_project(text, standards_context(country, standard))
     if not plan.requested:
         items = requested_items(text)
         if items:
@@ -471,16 +513,18 @@ def plan_project(text: str) -> ProjectPlan:
     return plan
 
 
-def _plan_project(text: str) -> ProjectPlan:
+def _plan_project(text: str, context: str = "") -> ProjectPlan:
     if _provider() == "mock" or _builtin_plan(text):
         return _mock_project(text)
-    plan = call_structured(ProjectPlan, PROJECT_INSTRUCTION, text)
+    plan = call_structured(ProjectPlan, PROJECT_INSTRUCTION + context, text)
     plan.origin = "AI"
     norm_text = _norm(text)
     for i in plan.inputs:   # a value counts as "given" only if the user's words are really in the text
         if i.value is not None and not (i.quote and _norm(i.quote) in norm_text
                                         and (re.search(r"\d", i.quote) or i.symbol.lower().startswith("n_sh"))):
             i.value, i.quote = None, None
+        if _from_standard(i.source_hint) or _from_standard(i.typical_note):   # engineer enters it from the standard
+            i.typical_value = None
     return plan
 
 
@@ -506,13 +550,13 @@ AI_OFF_MESSAGE = ("This question needs the AI to choose a calculation method, an
                   "If you already know the torque and speed, use the 'Advanced: Torque & RPM' tab.")
 
 
-def ask(text: str) -> AskResult:
+def ask(text: str, country: str = "", standard: str = "") -> AskResult:
     provider = _provider()
     r = route(text)
     res = AskResult(topic=r.topic, reason=r.reason, provider=provider)
     try:
         if r.topic == "project":
-            project = plan_project(text)
+            project = plan_project(text, country, standard)
             problems = repair_project(project)
             if problems:
                 res.status, res.message = "INVALID_PLAN", ("The AI's project plan could not be checked, so it was not used: "
@@ -524,7 +568,7 @@ def ask(text: str) -> AskResult:
         elif r.topic == "bearing_life":
             res.bearing_values = extract_bearing(text)
         else:
-            plan = plan_method(text)
+            plan = plan_method(text, country, standard)
             problems = validate_plan(plan)
             if problems:
                 res.status, res.message = "INVALID_PLAN", ("The AI's method could not be checked, so it was not used: "

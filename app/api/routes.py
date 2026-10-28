@@ -87,15 +87,21 @@ def parse_sizing(request: ParseRequirementsRequest):
     from app.ai.sizing_parser import get_sizing_parser
     return get_sizing_parser().parse(request.text).model_dump()
 
+class AskRequest(BaseModel):
+    text: str
+    country: str = ""       # project country chosen by the engineer
+    standard: str = ""      # customer's required standard
+
+
 @router.post("/ask")
-def ask_question(request: ParseRequirementsRequest):
+def ask_question(request: AskRequest):
     """
     One entry point for any engineering question: decides the kind of calculation
     (motor sizing, bearing life, or an AI-chosen method for other topics) and reads
     the values the user wrote. Never returns calculated results.
     """
     from app.ai.assistant import ask
-    return ask(request.text).model_dump()
+    return ask(request.text, request.country, request.standard).model_dump()
 
 
 class EvaluateMethodRequest(BaseModel):

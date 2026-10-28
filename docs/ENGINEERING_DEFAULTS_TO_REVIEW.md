@@ -193,5 +193,12 @@ that country's list only (or types one under "Other"). The lists are in `static/
 
 Choosing a standard does not change any calculation: it is recorded on the project and the report, and every check
 asks the engineer to confirm it meets that standard.
-Planned next: a standards table the engineer fills in per part and country, and passing the country and customer
-standard to the AI so AI-built plans follow them.
+**AI-built plans follow the choice.** The country and customer standard are sent to the AI with the question. It
+must use that standard's method where the standard covers the calculation and name it on each step; every factor,
+coefficient, allowable stress or partial safety factor taken from a standard's tables becomes an input marked
+"From <standard and clause> — enter from your copy of the standard", with no value filled in (the tool removes any
+number the AI gives for such a factor). For safety / legal / procedure standards, or standards whose detailed rules it
+cannot reproduce, the AI must say so first under Limitations. Built-in checks are not changed by the choice.
+
+Planned next: a standards table the engineer fills in per part and country; built-in checks to specific standards
+(e.g. AS 1403, DIN 743 shafts) using factors from the engineer's copy.
