@@ -336,3 +336,15 @@ def test_older_gemini_models_get_no_thinking_setting(monkeypatch):
     from google.genai import types
     assert assistant._gemini_thinking("gemini-2.0-flash-lite", "off", types) is None
     assert assistant._gemini_thinking("gemini-2.5-pro", "off", types).thinking_budget == 128
+
+
+def test_shredder_reads_every_value_written_in_common_words():
+    from app.ai.assistant import _mock_project
+    text = ("4 shaft shredder. Cutter diameter 150 mm, blade width 8 mm, bearing span 610 mm, 230 V supply. "
+            "Rotor speed 15 rpm, 4 blades cutting at the same time, material thickness 3 mm, material shear strength "
+            "40 MPa, allowable shear stress of the shaft steel 80 MPa, service factor 1.75, required bearing life "
+            "20000 hours, bearing dynamic load rating 60 kN.")
+    got = {i.symbol: i.value for i in _mock_project(text).inputs}
+    assert got == {"tau_s": 40, "t": 3, "b": 8, "z": 4, "D": 150, "n": 15, "N_sh": 4, "SF": 1.75, "L": 610,
+                   "tau_allow": 80, "life_req": 20000, "C": 60, "V": 230}
+    assert {i.symbol: i.value for i in _mock_project("four-shaft shredder, 20 rpm").inputs}["N_sh"] == 4

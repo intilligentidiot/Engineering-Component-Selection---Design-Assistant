@@ -433,12 +433,22 @@ _SHRED_VALUES = [
     ("D", r"(?:rotor|cutter|blade)\s*(?:diameter|dia\.?)\s*(?:of|is|:)?\s*(\d+(?:\.\d+)?)\s*mm", 1.0),
     ("D", r"(\d+(?:\.\d+)?)\s*mm\s*(?:rotor|cutter|blade)s?\b", 1.0),
     ("t", r"(\d+(?:\.\d+)?)\s*mm\s*thick", 1.0),
+    ("t", r"thickness\s*(?:of|is|:|=)?\s*(\d+(?:\.\d+)?)\s*mm", 1.0),
     ("b", r"(?:blade|cutter)s?\s*(?:width|wide)\s*(?:of|is|:)?\s*(\d+(?:\.\d+)?)\s*mm", 1.0),
+    ("z", r"(\d+)\s*blades?\s*(?:cutting|engaged|in contact|in the cut)", 1.0),
+    ("N_sh", r"\b(\d+)[- ]shaft\b", 1.0),
+    ("N_sh", r"\b(\d+)\s*(?:cutter|rotor)\s*shafts?\b", 1.0),
+    ("tau_allow", r"allowable\s*(?:shear\s*)?stress[a-z ]{0,30}?\s*(?:of|is|:|=)?\s*(\d+(?:\.\d+)?)\s*MPa", 1.0),
     ("tau_s", r"shear strength\s*(?:of|is|:)?\s*(\d+(?:\.\d+)?)\s*MPa", 1.0),
+    ("SF", r"service factor\s*(?:of|is|:|=)?\s*(\d+(?:\.\d+)?)", 1.0),
     ("L", r"bearing (?:span|distance)\s*(?:of|is|:)?\s*(\d+(?:\.\d+)?)\s*mm", 1.0),
     ("life_req", r"(\d+(?:\.\d+)?)\s*(?:h|hours?)\s*(?:of\s+)?(?:bearing\s+)?life", 1.0),
+    ("life_req", r"life\s*(?:of|is|:|=)?\s*(\d+(?:\.\d+)?)\s*(?:h|hrs?|hours?)\b", 1.0),
+    ("C", r"(?:dynamic\s*(?:load\s*)?rating|load rating|\bC\b)\s*(?:of|is|:|=)?\s*(\d+(?:\.\d+)?)\s*kN", 1.0),
     ("V", r"(\d+(?:\.\d+)?)\s*(?:v|volts?|vac|vdc)\b", 1.0),
 ]
+# "four-shaft shredder" written in words
+_SHAFT_WORDS = {"three": 3, "four": 4, "quad": 4, "five": 5, "six": 6}
 
 
 _CONVEYOR_VALUES = [
@@ -521,6 +531,9 @@ def _mock_project(text: str) -> ProjectPlan:
     elif re.search(r"\bsingle[- ]shaft", text, re.IGNORECASE):
         q = re.search(r"\bsingle[- ]shaft", text, re.IGNORECASE).group(0)
         by_symbol["N_sh"].value, by_symbol["N_sh"].quote = 1, q
+    elif re.search(r"\b(three|four|quad|five|six)[- ]shaft", text, re.IGNORECASE):
+        w = re.search(r"\b(three|four|quad|five|six)[- ]shaft", text, re.IGNORECASE)
+        by_symbol["N_sh"].value, by_symbol["N_sh"].quote = _SHAFT_WORDS[w.group(1).lower()], w.group(0)
     for sym, pat, k in _SHRED_VALUES:
         inp = by_symbol[sym]
         if inp.value is not None:
