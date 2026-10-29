@@ -274,16 +274,36 @@
                     ${s.note ? `<div class="sz-step-note">${esc(s.note)}</div>` : ""}</li>`).join("")}</ol>
                     ${Units.legendHtml(stepUnits(r.steps))}</details>`;
         } else if (c.kind === "bearing_life") {
-            const b = r.bearing;
-            const st = { MEETS: badge("DONE").replace("DONE", "MEETS"), DOES_NOT_MEET: `<span class="data-status DOES_NOT_MEET">DOES NOT MEET</span>` }[b.status] || "";
-            bodyHtml = `<div class="pj-results">
-                ${b.life_h != null ? `<div class="pj-res"><span>Expected life (${esc(c.bearing_type)} bearing)</span><strong>${Units.valueHtml(b.life_h, "h")} ${st}</strong></div>` : ""}
-                ${b.min_dynamic_rating_kn != null ? `<div class="pj-res"><span>Minimum dynamic load rating C</span><strong>${Units.valueHtml(b.min_dynamic_rating_kn, "kN")}</strong></div>` : ""}
-                <div class="pj-res"><span>Equivalent load P</span><strong>${Units.valueHtml(b.equivalent_load_n, "N")}</strong></div></div>
-                <details class="sz-details"><summary>Show working</summary><ol class="sz-steps">${b.steps.map((s, i) => `
-                    <li class="sz-stepline"><div class="sz-step-head"><span class="sz-step-n">${i + 1}</span> ${esc(s.label)}</div>
-                    ${MathFmt.block(s.formula, "sz-formula")}${MathFmt.block(s.substitution, "sz-subst")}</li>`).join("")}</ol>
-                    ${(b.notes || []).map(x => `<p class="field-hint">${esc(x)}</p>`).join("")}</details>`;
+            const b = r.bearing, u = r.used || {};
+            const st = { MEETS: `<span class="data-status MEETS">MEETS</span>`, DOES_NOT_MEET: `<span class="data-status DOES_NOT_MEET">DOES NOT MEET</span>` }[b.status] || "";
+            const exp = (b.steps || []).find(s => s.key === "exponent");
+            // Every value the check used, then every result, then the working — nothing hidden
+            const row = (label, html) => `<tr><td>${esc(label)}</td><td class="num">${html}</td></tr>`;
+            const usedRows = [
+                row("Bearing type", esc(c.bearing_type === "ball" ? "Ball bearing" : "Roller bearing")),
+                u.radial_load_n != null ? row("Radial load Fr", Units.valueHtml(u.radial_load_n, "N")) : "",
+                row("Axial load Fa", u.axial_load_n ? Units.valueHtml(u.axial_load_n, "N") : "none"),
+                u.speed_rpm != null ? row("Shaft speed n", Units.valueHtml(u.speed_rpm, "rpm")) : "",
+                u.required_life_h != null ? row("Required life", Units.valueHtml(u.required_life_h, "h")) : "",
+                row("Dynamic load rating C", u.dynamic_rating_kn != null ? Units.valueHtml(u.dynamic_rating_kn, "kN") : "not given — the minimum C is calculated"),
+                row("Reliability", "90 % (L10, a₁ = 1)"),
+            ].join("");
+            const resRows = [
+                b.life_h != null ? row(`Expected life L10h (${c.bearing_type} bearing)`, `${Units.valueHtml(b.life_h, "h")} ${st}`) : "",
+                b.min_dynamic_rating_kn != null ? row("Minimum dynamic load rating C", `<strong>${Units.valueHtml(b.min_dynamic_rating_kn, "kN")}</strong>`) : "",
+                row("Equivalent dynamic load P", Units.valueHtml(b.equivalent_load_n, "N")),
+                exp ? row("Life exponent p", esc(exp.substitution.replace(/^p\s*/, ""))) : "",
+            ].join("");
+            bodyHtml = `<div class="pj-bearing">
+                <div><h4>Values used</h4><table class="rs-table">${usedRows}</table></div>
+                <div><h4>Results</h4><table class="rs-table">${resRows}</table>
+                    ${b.min_dynamic_rating_kn != null ? `<p class="pj-bearing-tip">Choose a bearing whose catalogue C is at least ${esc(plain(b.min_dynamic_rating_kn, "kN"))}.</p>` : ""}
+                    ${b.status === "MEETS" ? `<p class="pj-bearing-tip">Expected life is at least the required ${esc(plain(u.required_life_h, "h"))}.</p>` : ""}
+                    ${b.status === "DOES_NOT_MEET" ? `<p class="pj-bearing-tip bad">Expected life is below the required ${esc(plain(u.required_life_h, "h"))} — choose a bearing with a higher C.</p>` : ""}</div></div>
+                <details class="sz-details" open><summary>Working (${b.steps.length} steps)</summary><ol class="rs-steps">${b.steps.map((s, i) => `
+                    <li class="rs-step"><div class="rs-step-n">${i + 1}</div><div class="rs-step-body"><div class="rs-step-name">${esc(s.label)}</div>
+                    ${MathFmt.block(s.formula, "rs-formula")}${MathFmt.block(s.substitution, "rs-subst")}</div></li>`).join("")}</ol>
+                    ${(b.notes || []).filter(x => !/^Choose a bearing/.test(x)).map(x => `<p class="field-hint" style="margin-top:0.5rem">${esc(x)}</p>`).join("")}</details>`;
         } else {
             const m = r.motors || [];
             const net = r.internet;
@@ -307,8 +327,8 @@
         const noMatch = c.kind === "motor_selection" && r.status === "DONE" && !(r.motors || []).length;
         const tag = noMatch ? `<span class="data-status DATA_INCOMPLETE">NO MATCH IN LIST</span>` : badge(r.status);
         return `<div class="pj-card ${noMatch ? "waiting" : r.status.toLowerCase()}">
-            <div class="pj-card-head"><span class="pj-n">${n}</span><div><div class="pj-card-title">${esc(c.title)} ${tag}</div>
-                <div class="pj-card-meta">${esc(c.purpose)}${c.standard ? ` <span class="tag tag-std">${esc(c.standard)}${eq ? ` = ${esc(eq.name)}` : ""}</span>` : ""}${c.kind !== "formula" ? ` <span class="tag tag-ok">checked calculation</span>` : ""}</div>
+            <div class="pj-card-head"><span class="pj-n">${n}</span><div><div class="pj-card-title">${esc(eq ? c.title.replace(/\(ISO 281\)/, `(${eq.name})`) : c.title)} ${tag}</div>
+                <div class="pj-card-meta">${esc(c.purpose)}${c.standard ? ` <span class="tag tag-std">${eq ? `${esc(eq.name)} — same method as ${esc(c.standard)}` : esc(c.standard)}</span>` : ""}${c.kind !== "formula" ? ` <span class="tag tag-ok">checked calculation</span>` : ""}</div>
                 ${c.note ? `<div class="field-hint">${esc(c.note)}</div>` : ""}
                 ${stdLine ? `<div class="std-note">${esc(stdLine)}</div>` : ""}</div></div>
             ${bodyHtml}</div>`;

@@ -100,7 +100,7 @@ def bearing_life(req: BearingRequest) -> BearingResult:
                              missing_inputs=missing, errors=errors)
 
     p = 3.0 if btype == "ball" else 10.0 / 3.0
-    p_txt = "3" if btype == "ball" else "10/3"
+    p_txt = "3" if btype == "ball" else "(10/3)"
     step("exponent", "Life exponent", "p = 3 (ball) or 10/3 (roller)", f"p ({btype})", p, "",
          {"bearing_type": (btype, "", "USER")})
     if Fa == 0:
