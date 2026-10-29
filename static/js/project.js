@@ -28,19 +28,18 @@
             else if (i.typical_value !== null && i.typical_value !== undefined) { values[i.symbol] = i.typical_value; typical[i.symbol] = i.typical_note || "typical value"; }
         });
         const ai = plan.origin === "AI";
-        head.innerHTML = `
-            <div class="sz-note ${ai ? "ai-method" : "info"}">
-                <strong>${ai ? "⚠ Plan and methods chosen by AI — check before use." : "Built-in calculation plan (not yet approved by an engineer)."}</strong>
-                ${ai ? "Every number is calculated by the tool from your inputs and every step is shown, but the method must be checked by an engineer." : ""}
-                ${ai ? "" : "Motor + gearbox selection and bearing life use the tool's checked calculations."}
-            </div>
-            <h2 class="pj-title">${esc(plan.title)}</h2>
-            <p class="field-hint">${esc(plan.summary)}</p>
-            <div id="pj-std-summary"></div>`;
+        head.innerHTML = `<div class="as-head">
+            <div class="as-head-tags">${ai ? `<span class="tag tag-ai">AI plan — check before use</span>`
+                : `<span class="tag tag-ok">Built-in plan</span><span class="tag">pending engineering approval</span>`}</div>
+            <h2 class="as-head-title pj-title">${esc(plan.title)}</h2>
+            <p class="as-head-sum">${esc(plan.summary)}</p>
+            <p class="as-head-note">${ai ? "The AI chose the methods; the tool does every calculation and shows each step."
+                : "Motor + gearbox selection and bearing life use the tool's checked calculations."}</p>
+            <div id="pj-std-summary"></div></div>`;
         stdSummary();
         renderInfo();
         $("pj-limits").innerHTML = (plan.limitations || []).length
-            ? `<div class="sz-note warn"><strong>Limitations of this plan</strong><ul>${plan.limitations.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>` : "";
+            ? `<details class="rs-fold"><summary>Limitations of this plan <span>(${plan.limitations.length})</span></summary><ul>${plan.limitations.map(x => `<li>${esc(x)}</li>`).join("")}</ul></details>` : "";
         area.hidden = false;
         await evaluate();
         area.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -50,7 +49,7 @@
     function stdSummary() {
         const el = $("pj-std-summary");
         const s = window.Standards ? Standards.summaryText() : "";
-        if (el) el.innerHTML = s ? `<p class="std-summary">${esc(s)}. Each check below says which standard it follows — confirm they are accepted for this project.</p>` : "";
+        if (el) el.innerHTML = s ? `<div class="std-note">${esc(s)}. Each calculation names the standard it follows — confirm they are accepted for this project.</div>` : "";
     }
     document.addEventListener("standards-change", () => {
         if (!plan || area.hidden) return;
@@ -211,11 +210,15 @@
             if (inp && values[q.symbol] !== undefined && values[q.symbol] !== "")
                 return `<div class="pj-res"><span>${esc(q.text)}</span><strong>${Units.valueHtml(Number(values[q.symbol]), inp.unit)}</strong></div>`;
             const f = from[q.symbol];
-            const why = f && f.res.status === "WAITING" ? `waiting for: ${f.res.waiting_for.join(", ")}` : "waiting for information";
-            return `<div class="pj-res"><span>${esc(q.text)}</span><strong class="pj-none">${esc(why)}</strong></div>`;
+            const needs = f && f.res.status === "WAITING" ? f.res.waiting_for : [];
+            const pill = needs.length ? `<span class="pill-wait" title="Waiting for: ${esc(needs.join(", "))}">needs ${needs.length} more input${needs.length > 1 ? "s" : ""}</span>`
+                                      : `<span class="pill-wait">waiting for information</span>`;
+            return `<div class="pj-res"><span>${esc(q.text)}</span><strong class="pj-none">${pill}</strong></div>`;
         });
         const done = items.filter(q => q.symbol && results[q.symbol]).length;
-        box.innerHTML = `<div class="pj-asked"><div class="pj-asked-head">${listed ? "You asked for" : "Key results"} <span class="pj-progress">${done} of ${items.length} ${listed ? "answered" : "calculated"}</span></div>${rows.join("")}</div>`;
+        box.innerHTML = `<div class="pj-asked"><div class="pj-asked-head">${listed ? "You asked for" : "Key results"}
+            <span class="pj-meter" title="${done} of ${items.length}"><span style="width:${items.length ? Math.round(100 * done / items.length) : 0}%"></span></span>
+            <span class="pj-progress">${done} of ${items.length} ${listed ? "answered" : "calculated"}</span></div>${rows.join("")}</div>`;
     }
 
     const badge = s => ({ DONE: `<span class="data-status MEETS">DONE</span>`, WAITING: `<span class="data-status DISCOVERED">WAITING</span>`,
@@ -259,14 +262,14 @@
     function card(c, r, n) {
         let bodyHtml = "";
         if (r.status === "WAITING") {
-            bodyHtml = `<div class="pj-wait">Needs: ${r.waiting_for.map(esc).join(", ")}</div>`;
+            bodyHtml = `<div class="pj-wait"><span>Waiting for</span> ${r.waiting_for.map(x => `<span class="need-chip">${esc(x)}</span>`).join("")}</div>`;
         } else if (r.status === "ERROR") {
             bodyHtml = `<div class="sz-note danger"><ul>${r.errors.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>`;
         } else if (c.kind === "formula") {
             bodyHtml = `<div class="pj-results">${r.steps.map(s => `<div class="pj-res"><span>${esc(s.name)}</span><strong>${Units.valueHtml(s.result, s.unit)}</strong></div>`).join("")}</div>
                 <details class="sz-details"><summary>Show working <span class="u-note">(the formula uses the calculation's units so the arithmetic can be checked; your units are shown under each step)</span></summary><ol class="sz-steps">${r.steps.map((s, i) => `
                     <li class="sz-stepline"><div class="sz-step-head"><span class="sz-step-n">${i + 1}</span> ${esc(s.name)}</div>
-                    <div class="sz-formula">${esc(s.formula)}</div><div class="sz-subst">${esc(s.substitution)}</div>
+                    ${MathFmt.block(s.formula, "sz-formula")}${MathFmt.block(s.substitution, "sz-subst")}
                     ${inYourUnitsLine(s)}
                     ${s.note ? `<div class="sz-step-note">${esc(s.note)}</div>` : ""}</li>`).join("")}</ol>
                     ${Units.legendHtml(stepUnits(r.steps))}</details>`;
@@ -279,7 +282,7 @@
                 <div class="pj-res"><span>Equivalent load P</span><strong>${Units.valueHtml(b.equivalent_load_n, "N")}</strong></div></div>
                 <details class="sz-details"><summary>Show working</summary><ol class="sz-steps">${b.steps.map((s, i) => `
                     <li class="sz-stepline"><div class="sz-step-head"><span class="sz-step-n">${i + 1}</span> ${esc(s.label)}</div>
-                    <div class="sz-formula">${esc(s.formula)}</div><div class="sz-subst">${esc(s.substitution)}</div></li>`).join("")}</ol>
+                    ${MathFmt.block(s.formula, "sz-formula")}${MathFmt.block(s.substitution, "sz-subst")}</li>`).join("")}</ol>
                     ${(b.notes || []).map(x => `<p class="field-hint">${esc(x)}</p>`).join("")}</details>`;
         } else {
             const m = r.motors || [];
@@ -302,9 +305,9 @@
         const tag = noMatch ? `<span class="data-status DATA_INCOMPLETE">NO MATCH IN LIST</span>` : badge(r.status);
         return `<div class="pj-card ${noMatch ? "waiting" : r.status.toLowerCase()}">
             <div class="pj-card-head"><span class="pj-n">${n}</span><div><div class="pj-card-title">${esc(c.title)} ${tag}</div>
-                <div class="field-hint">${esc(c.purpose)}${c.standard ? ` · <em>${esc(c.standard)}</em>` : ""}${c.kind !== "formula" ? " · checked calculation" : ""}</div>
+                <div class="pj-card-meta">${esc(c.purpose)}${c.standard ? ` <span class="tag tag-std">${esc(c.standard)}</span>` : ""}${c.kind !== "formula" ? ` <span class="tag tag-ok">checked calculation</span>` : ""}</div>
                 ${c.note ? `<div class="field-hint">${esc(c.note)}</div>` : ""}
-                ${window.Standards && (c.standard || c.kind !== "formula") ? Standards.noteFor(c.standard, plan.origin === "AI") : ""}</div></div>
+                ${window.Standards && c.standard && Standards.regionalFor(c.standard) ? `<div class="std-note">${esc(Standards.regionalFor(c.standard))}</div>` : ""}</div></div>
             ${bodyHtml}</div>`;
     }
 

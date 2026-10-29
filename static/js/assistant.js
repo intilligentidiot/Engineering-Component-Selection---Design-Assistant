@@ -47,8 +47,12 @@
     // Plan inputs become field definitions too
     const defsFor = () => topic === "bearing_life"
         ? Object.fromEntries(Object.entries(BEARING).map(([k, d]) => [k, { key: k, ...d }]))
-        : Object.fromEntries((plan?.inputs || []).map(i => [i.symbol, { key: i.symbol, label: i.name, unit: i.unit,
-            hint: i.typical_value == null && i.typical_note ? i.typical_note : "" }]));
+        : Object.fromEntries((plan?.inputs || []).map(i => {
+            const fromStd = /enter from your copy/i.test(`${i.typical_note || ""} ${i.source_hint || ""}`);
+            const note = i.typical_value == null ? (i.typical_note || i.source_hint || "") : "";
+            return [i.symbol, { key: i.symbol, label: i.name, unit: i.unit, fromStd,
+                hint: note.replace(/\s*[—-]\s*enter from your copy of the standard\.?/i, "") }];
+        }));
 
     function fieldHtml(d, highlight) {
         const v = values[d.key];
@@ -60,7 +64,7 @@
         return `<div class="field-group${cls}">
             <label>${esc(d.label)}${d.optional ? ' <span class="opt-tag">optional</span>' : ""}</label>
             <div class="input-row">${input}${d.unit ? `<span class="unit-badge">${esc(d.unit)}</span>` : ""}</div>
-            ${typical[d.key] ? `<p class="field-hint sug-hint">Suggested by the AI: ${esc(typical[d.key])}</p>` : ""}
+            ${typical[d.key] ? `<p class="field-hint sug-hint">${esc(typical[d.key])}</p>` : ""}
             ${d.hint ? `<p class="field-hint">${esc(d.hint)}</p>` : ""}
         </div>`;
     }
@@ -81,16 +85,20 @@
         area.hidden = false;
         if (data.status !== "OK") {
             banner.innerHTML = `<div class="sz-note warn"><strong>${esc(data.message || "This question could not be handled.")}</strong>
-                <div class="sz-ai-actions" style="margin-top:0.6rem"><button type="button" class="btn-secondary" data-goto-tab="selection">Open Advanced: Torque &amp; RPM</button></div></div>`;
+                ${data.status === "AI_NOT_CONFIGURED" ? `<div class="sz-ai-actions" style="margin-top:0.6rem"><button type="button" class="btn-secondary" data-goto-tab="selection">Open Advanced: Torque &amp; RPM</button></div>` : ""}</div>`;
             understood.innerHTML = ""; neededWrap.hidden = true; calcBtn.hidden = true;
+            area.classList.add("as-failed");
             return;
         }
         calcBtn.hidden = false;
+        area.classList.remove("as-failed");
         if (topic === "bearing_life") {
             (data.bearing_values || []).forEach(v => { values[v.field] = v.value; quotes[v.field] = v.quote; });
             if (values.reliability_pct !== undefined) values.reliability_pct = String(values.reliability_pct);
-            banner.innerHTML = `<div class="sz-note info"><strong>Bearing life check — ISO 281.</strong> ${esc(data.reason)}
-                This is a checked calculation built into the tool.</div>`;
+            banner.innerHTML = `<div class="as-head">
+                <div class="as-head-tags"><span class="tag tag-ok">Checked calculation</span><span class="tag tag-std">ISO 281</span></div>
+                <h2 class="as-head-title">Bearing life</h2>
+                <p class="as-head-sum">Basic rating life of a rolling bearing, built into the tool.</p></div>`;
             calcBtn.textContent = "Calculate bearing life";
         } else {
             plan = data.plan;
@@ -100,12 +108,11 @@
                     values[i.symbol] = i.typical_value; typical[i.symbol] = i.typical_note || "typical value";
                 }
             });
-            banner.innerHTML = `<div class="sz-note ai-method">
-                <strong>⚠ Method chosen by AI — check before use.</strong>
-                The tool has no checked calculation for this yet, so the AI chose the method below. The tool does all the
-                arithmetic itself from your numbers and shows every step, but the method and formulas must be checked by an engineer.
-                <div class="as-plan-title">${esc(plan.title)}${plan.standard ? ` <span>· ${esc(plan.standard)}</span>` : ""}</div>
-                <div>${esc(plan.summary)}</div></div>`;
+            banner.innerHTML = `<div class="as-head">
+                <div class="as-head-tags"><span class="tag tag-ai">AI method — check before use</span>${plan.standard ? `<span class="tag tag-std">${esc(plan.standard)}</span>` : ""}</div>
+                <h2 class="as-head-title">${esc(plan.title)}</h2>
+                <p class="as-head-sum">${esc(plan.summary)}</p>
+                <p class="as-head-note">The AI chose the method; the tool does every calculation from your numbers and shows each step.</p></div>`;
             calcBtn.textContent = "Calculate";
         }
         await refresh(false);
@@ -134,7 +141,18 @@
         }
         const either = topic === "bearing_life" && ask.includes("dynamic_rating_kn") && ask.includes("required_life_h")
             ? `<p class="field-hint" style="grid-column: 1 / -1">Give <strong>either</strong> the bearing's rating C (to get its life) <strong>or</strong> the life you need (to get the minimum C).</p>` : "";
-        form.innerHTML = either + ask.map(k => fieldHtml(defs[k], highlight && !filled(k))).join("");
+        if (topic === "bearing_life") {
+            form.innerHTML = either + ask.map(k => fieldHtml(defs[k], highlight && !filled(k))).join("");
+        } else {   // group: what only the engineer knows, factors from the standard, and the AI's suggestions
+            const groups = [
+                ["Needed", "", ask.filter(k => !typical[k] && !defs[k].fromStd)],
+                [`From ${plan.standard || "the standard"}`, "Enter these from your copy of the standard.", ask.filter(k => defs[k].fromStd)],
+                ["Suggested — please check", "Typical values the AI suggested. Change them to your material or catalogue data.", ask.filter(k => typical[k])],
+            ];
+            form.innerHTML = groups.filter(g => g[2].length).map(([h, note, keys]) =>
+                `<div class="fg-head"><strong>${esc(h)}</strong>${note ? ` <span>${esc(note)}</span>` : ""}</div>` +
+                keys.map(k => fieldHtml(defs[k], highlight && !filled(k))).join("")).join("");
+        }
         neededTitle.textContent = missingCount === 0 ? (ask.length ? "Check the suggested values" : "")
             : missingCount === 1 ? "Just one more thing" : `Just ${missingCount} more things`;
         neededWrap.hidden = ask.length === 0;
@@ -199,26 +217,46 @@
         panel.hidden = false;
     }
 
-    const card = (label, val, unit, subtext, cls = "") => `<div class="sz-req ${cls}"><div class="sz-req-label">${esc(label)}</div><div class="sz-req-val">${Units.family(unit) ? Units.valueHtml(val, unit) : `${fmt(val)} <span>${esc(unit)}</span>`}</div>${subtext ? `<div class="sz-req-sub">${esc(subtext)}</div>` : ""}</div>`;
-    const stepsHtml = steps => `<ol class="sz-steps">${steps.map((s, i) => `
-        <li class="sz-stepline">
-            <div class="sz-step-head"><span class="sz-step-n">${i + 1}</span> ${esc(s.label || s.name)}</div>
-            <div class="sz-formula">${esc(s.formula)}</div>
-            <div class="sz-subst">${esc(s.substitution)}</div>
-            ${Units.stepConversionHtml([], s.symbol || s.key || "", s.result, s.unit)}
-            ${s.note ? `<div class="sz-step-note">${esc(s.note)}</div>` : ""}
+    // Main answer: big number, its name, and a short line under it
+    const card = (label, val, unit, subtext, cls = "") => `<div class="rs-key ${cls}"><div class="rs-key-label">${esc(label)}</div>
+        <div class="rs-key-val">${Units.family(unit) ? Units.valueHtml(val, unit) : `${fmt(val)} <span class="rs-unit">${esc(unit)}</span>`}</div>
+        ${subtext ? `<div class="rs-key-sub">${esc(subtext)}</div>` : ""}</div>`;
+    // Each step: what it is, the formula as an engineer writes it, the numbers put in, the result
+    const stepsHtml = steps => `<ol class="rs-steps">${steps.map((s, i) => `
+        <li class="rs-step">
+            <div class="rs-step-n">${i + 1}</div>
+            <div class="rs-step-body">
+                <div class="rs-step-name">${esc(s.label || s.name)}${s.note ? `<span class="rs-step-note">${esc(s.note)}</span>` : ""}</div>
+                ${MathFmt.block(s.formula, "rs-formula")}
+                ${MathFmt.block(s.substitution, "rs-subst")}
+                ${Units.stepConversionHtml([], s.symbol || s.key || "", s.result, s.unit)}
+            </div>
         </li>`).join("")}</ol>${Units.legendHtml(steps.map(s => s.unit))}`;
-    const typicalUsed = () => Object.entries(typical).filter(([k]) => filled(k))
-        .map(([k, note]) => `${(defsFor()[k] || { label: k }).label}: ${values[k]} — ${note}`);
-    const list = (items, cls, heading) => items.length ? `<div class="sz-note ${cls}"><strong>${esc(heading)}</strong><ul>${items.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>` : "";
+    const section = (heading, inner, extra = "") => inner ? `<section class="rs-section"><h3>${esc(heading)}${extra ? ` <span>${esc(extra)}</span>` : ""}</h3>${inner}</section>` : "";
+    const fold = (heading, items) => items.length ? `<details class="rs-fold"><summary>${esc(heading)} <span>(${items.length})</span></summary><ul>${items.map(x => `<li>${esc(x)}</li>`).join("")}</ul></details>` : "";
+
+    // Every input the calculation used, with where its value came from
+    function inputsTable() {
+        const defs = defsFor();
+        const rows = (plan?.inputs || []).filter(i => filled(i.symbol)).map(i => {
+            const d = defs[i.symbol];
+            const src = quotes[i.symbol] ? `<span class="src src-you" title="From your text: “${esc(quotes[i.symbol])}”">Your text</span>`
+                : typical[i.symbol] ? `<span class="src src-sug" title="${esc(typical[i.symbol])}">AI suggestion</span>`
+                : d.fromStd ? `<span class="src src-std" title="${esc(d.hint)}">From the standard</span>`
+                : `<span class="src">Entered</span>`;
+            const val = Units.family(i.unit) ? Units.valueHtml(Number(values[i.symbol]), i.unit) : `${fmt(Number(values[i.symbol]))} ${esc(i.unit || "")}`;
+            return `<tr><td>${esc(i.name)} <span class="rs-sym">${MathFmt.html(i.symbol)}</span></td><td class="num">${val}</td><td>${src}</td></tr>`;
+        });
+        return rows.length ? `<table class="rs-table"><thead><tr><th>Input</th><th class="num">Value</th><th>Source</th></tr></thead><tbody>${rows.join("")}</tbody></table>` : "";
+    }
 
     // Redraw the last result when the units change, so "in your units" lines follow
     let lastShown = null;
     function redraw() {
         if (!lastShown || panel.hidden) return;
-        const open = body.querySelector("details.sz-details")?.open;
+        const open = body.querySelector("details.rs-fold")?.open;
         lastShown[0](lastShown[1], true);
-        const d = body.querySelector("details.sz-details");
+        const d = body.querySelector("details.rs-fold");
         if (d && open) d.open = true;
     }
     Units.onChange(redraw);
@@ -232,32 +270,31 @@
             : `Bearing life${badge ? ` &nbsp;<span class="data-status ${badge}">${badge.replace(/_/g, " ")}</span>` : ""}`;
         sub.textContent = "ISO 281 basic rating life — checked calculation built into the tool.";
         body.innerHTML = `
-            <div class="sz-req-grid main">
-                ${r.life_h != null ? card("Expected life", r.life_h, "h", `at ${values.reliability_pct || 90} % reliability`, "key") : ""}
-                ${r.min_dynamic_rating_kn != null ? card("Minimum rating C", r.min_dynamic_rating_kn, "kN", "look for a bearing with at least this C", "key") : ""}
+            <div class="rs-keys">
+                ${r.life_h != null ? card("Expected life", r.life_h, "h", `at ${values.reliability_pct || 90} % reliability`, "main") : ""}
+                ${r.min_dynamic_rating_kn != null ? card("Minimum rating C", r.min_dynamic_rating_kn, "kN", "choose a bearing with at least this C", "main") : ""}
                 ${card("Equivalent load P", r.equivalent_load_n, "N")}
             </div>
             ${stdNote("ISO 281", false)}
-            ${list(r.notes || [], "info", "Notes")}
-            <details class="sz-details"><summary>Show the full calculation (${r.steps.length} steps)</summary>${stepsHtml(r.steps)}</details>`;
+            ${section("Calculation", stepsHtml(r.steps), `${r.steps.length} steps`)}
+            ${fold("Notes", r.notes || [])}`;
         panel.hidden = false;
         if (!quiet) panel.scrollIntoView({ behavior: "smooth", block: "start" });
     }
 
     function renderMethod(r, quiet = false) {
         lastShown = [renderMethod, r];
-        title.innerHTML = `${esc(plan.title)} <span class="data-status DISCOVERED">AI METHOD — CHECK</span>`;
-        sub.textContent = plan.standard ? `Method: ${plan.standard} (chosen by AI). Numbers calculated by the tool from your inputs.`
-                                        : "Method chosen by AI. Numbers calculated by the tool from your inputs.";
+        title.textContent = plan.title;
+        sub.innerHTML = `<span class="tag tag-ai">AI method — check before use</span>${plan.standard ? `<span class="tag tag-std">${esc(plan.standard)}</span>` : ""}`;
+        const suggested = Object.keys(typical).filter(filled).length;
         body.innerHTML = `
-            <div class="sz-req-grid main">${r.results.map(s => card(s.name, s.result, s.unit, "", "key")).join("")}</div>
-            <div class="sz-note ai-method"><strong>⚠ Check before use.</strong> The formulas below were chosen by the AI, not
-                taken from a checked module. Every number was calculated by the tool — verify the method and units against the
-                standard before relying on the result.</div>
-            ${stdNote(plan.standard, true)}
-            ${list(typicalUsed(), "info", "Typical values suggested by the AI that were used — please check")}
-            ${list(plan.limitations || [], "warn", "Limitations of this method")}
-            <details class="sz-details" open><summary>Show the full calculation (${r.steps.length} steps)</summary>${stepsHtml(r.steps)}</details>`;
+            <div class="rs-keys">${r.results.map(s => card(s.name, s.result, s.unit, "", "main")).join("")}</div>
+            <div class="rs-check"><strong>Check before use.</strong> The AI chose these formulas; the tool calculated every number.
+                Verify the method, units${suggested ? ` and the ${suggested} AI-suggested value${suggested > 1 ? "s" : ""}` : ""} before relying on the result.
+                ${stdNote(plan.standard, true)}</div>
+            ${section("Inputs used", inputsTable())}
+            ${section("Calculation", stepsHtml(r.steps), `${r.steps.length} steps`)}
+            ${fold("Limitations of this method", plan.limitations || [])}`;
         panel.hidden = false;
         if (!quiet) panel.scrollIntoView({ behavior: "smooth", block: "start" });
     }

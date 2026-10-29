@@ -12,6 +12,7 @@
     <link rel="apple-touch-icon" href="/static/img/favicon-128.png">
     <link rel="stylesheet" href="/static/css/style.css?v=9.7">
     <link rel="stylesheet" href="/static/css/theme.css?v=1.7">
+    <link rel="stylesheet" href="/static/css/ui.css?v=1.1">
     <script>
         // Apply the saved theme before the page draws (light by default)
         (function () {
@@ -81,19 +82,28 @@
             <section class="panel input-panel">
                 <div class="panel-header">
                     <h1>What do you need to calculate?</h1>
-                    <p>Describe your machine or ask an engineering question in your own words. Motor + gearbox sizing and bearing life use checked calculations; other topics use a method chosen by the AI, with every number calculated by the tool and every step shown.</p>
+                    <p>Describe your machine or ask an engineering question in your own words. The tool calculates every number and shows each step.</p>
                 </div>
 
                 <form id="sizing-form" novalidate>
                     <!-- Simple view: describe → review what we understood → answer only what is missing -->
                     <div id="sz-guided">
                         <div class="sz-ai-box">
-                            <textarea id="sz-ai-text" rows="4" placeholder="Examples:&#10;• Conveyor moving 20 plastic blocks 200x100x50 mm, density 1200 kg/m3, belt speed 0.5 m/s, 100 mm pulley, flat&#10;• Ball bearing, radial load 2000 N at 1500 rpm, C = 14 kN, need 20000 hours life&#10;• I'm designing a twin-shaft plastic shredder, 300 mm rotor, 20 rpm, 400 V&#10;• Shaft diameter for 50 Nm torque, steel"></textarea>
+                            <label for="sz-ai-text" class="sr-only">Your question</label>
+                            <textarea id="sz-ai-text" rows="3" placeholder="e.g. Shaft diameter for 400 N·m torque and 1200 N·m bending moment, 4140 steel"></textarea>
+                            <div class="ex-row"><span>Try:</span>
+                                <button type="button" class="ex-chip" data-example="Conveyor moving 20 plastic blocks 200x100x50 mm, density 1200 kg/m3, belt speed 0.5 m/s, 100 mm pulley, flat">Conveyor motor</button>
+                                <button type="button" class="ex-chip" data-example="Ball bearing, radial load 2000 N at 1500 rpm, C = 14 kN, need 20000 hours life">Bearing life</button>
+                                <button type="button" class="ex-chip" data-example="I'm designing a twin-shaft plastic shredder, 300 mm rotor, 20 rpm, 400 V">Shredder project</button>
+                                <button type="button" class="ex-chip" data-example="Shaft diameter for 400 N·m torque and 1200 N·m bending moment, 4140 steel">Shaft size</button>
+                                <button type="button" class="ex-chip" data-example="Hydraulic cylinder to push 50 kN at 160 bar, find bore">Hydraulic cylinder</button>
+                            </div>
                             <div class="sz-ai-actions">
                                 <button type="button" id="sz-ai-btn" class="btn-primary">Continue</button>
                                 <button type="button" id="sz-manual-btn" class="link-btn">or fill in the full form yourself</button>
                             </div>
-                            <p class="field-hint">Only the numbers you write are used as your values. Anything missing is asked, or filled with a clearly marked typical value you can change.</p>
+                            <p class="field-hint">Only the numbers you write are used. Anything missing is asked, or filled with a clearly marked typical value you can change.</p>
+                            <div class="std-head">Project settings</div>
                             <div class="std-row">
                                 <label class="std-field">Project country
                                     <select id="std-country" title="Country the machine is designed for"></select>
@@ -379,12 +389,13 @@
            every number is calculated by the tool and shown step by step</p>
     </footer>
 
-    <script src="/static/js/standards.js?v=1.3"></script>
+    <script src="/static/js/format.js?v=1.0"></script>
+    <script src="/static/js/standards.js?v=1.4"></script>
     <script src="/static/js/units.js?v=9.7"></script>
     <script src="/static/js/main.js?v=9.7"></script>
-    <script src="/static/js/sizing.js?v=9.9"></script>
-    <script src="/static/js/assistant.js?v=9.9"></script>
-    <script src="/static/js/project.js?v=9.8"></script>
+    <script src="/static/js/sizing.js?v=10.0"></script>
+    <script src="/static/js/assistant.js?v=10.0"></script>
+    <script src="/static/js/project.js?v=9.9"></script>
     <script src="/static/js/report.js?v=1.1"></script>
 </body>
 </html>

@@ -213,6 +213,12 @@
         return `<div class="std-note">${follows} ${regional ? esc(regional) + " " : ""}${confirm}</div>`;
     }
 
+    // A note when the project's country usually uses a different standard for this check
+    function regionalFor(standard) {
+        const country = get().country;
+        return standard && country ? (REGION_NOTES.find(r => r.match.test(standard))?.notes[country] || "") : "";
+    }
+
     // What a listed standard covers ("" for a typed one) — told to the AI so it does not guess
     function scopeOf(country, code) {
         return (STANDARDS[country] || []).find(([c]) => c === code)?.[1] || "";
@@ -277,5 +283,5 @@
     }
 
     document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", init) : init();
-    window.Standards = { get, noteFor, summaryText, suggest, scopeOf, COUNTRIES, STANDARDS };
+    window.Standards = { get, noteFor, regionalFor, summaryText, suggest, scopeOf, COUNTRIES, STANDARDS };
 })();

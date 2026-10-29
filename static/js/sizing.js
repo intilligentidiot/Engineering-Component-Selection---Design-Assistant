@@ -557,8 +557,8 @@
             return `
             <li class="sz-stepline">
                 <div class="sz-step-head"><span class="sz-step-n">${i + 1}</span> ${esc(s.label)}</div>
-                <div class="sz-formula">${esc(s.formula)}</div>
-                <div class="sz-subst">${esc(s.substitution)}</div>
+                ${MathFmt.block(s.formula, "sz-formula")}
+                ${MathFmt.block(s.substitution, "sz-subst")}
                 ${Units.stepConversionHtml(Object.entries(s.inputs || {}).map(([k, inp]) => [k, inp.value, inp.unit]), s.key, s.result, s.unit)}
                 ${defaults.length ? `<div class="sz-step-note default">Uses default: ${defaults.map(([k, inp]) => `${esc(k)} = ${esc(inp.value)} ${esc(inp.unit)}`).join(", ")}</div>` : ""}
                 ${s.note ? `<div class="sz-step-note">${esc(s.note)}</div>` : ""}
