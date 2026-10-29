@@ -24,6 +24,8 @@ from typing import Optional, List, Dict, Any, Tuple
 
 from pydantic import BaseModel, Field
 
+from app.engine.quote_units import checked_value, has_number
+
 logger = logging.getLogger(__name__)
 
 # ─────────────────────────────────────────────────────────────
@@ -136,6 +138,12 @@ _FRACTIONS = {"friction_coefficient", "drive_efficiency", "rope_efficiency", "gu
 _ZERO_OK = {"incline_deg", "axis_angle_deg"}
 # Angles may be stated in words instead of numbers
 _WORD_ANGLES = {"vertical": 90.0, "vertically": 90.0, "horizontal": 0.0, "horizontally": 0.0, "flat": 0.0, "level": 0.0}
+# Field unit from its name, so the tool can convert the user's words itself
+_SUFFIX_UNITS = [("_kg_m3", "kg/m3"), ("_m_s", "m/s"), ("_mm", "mm"), ("_kg", "kg"), ("_nm", "N·m"), ("_n", "N")]
+
+
+def _field_unit(field: str) -> Optional[str]:
+    return next((u for suffix, u in _SUFFIX_UNITS if field.endswith(suffix)), None)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -250,9 +258,16 @@ class SizingRequirementParser(ABC):
                     rejected.append(RejectedValue(field=path, reason=f"'{val}' is not a recognised option"))
                     continue
             elif field not in _TEXT_FIELDS:
-                if not re.search(r"\d", quote) and not (field in _ZERO_OK and _WORD_ANGLES.get(_norm(quote)) == val):
+                word_angle = field in _ZERO_OK and _WORD_ANGLES.get(_norm(quote)) == val
+                if not word_angle and not has_number(quote):
                     rejected.append(RejectedValue(field=path, reason="no number in the quoted words"))
                     continue
+                if not word_angle:   # the tool converts the user's words itself; the AI's arithmetic is not used
+                    checked = checked_value(quote, val, _field_unit(field))
+                    if checked is None:
+                        rejected.append(RejectedValue(field=path, reason="the number does not match your words"))
+                        continue
+                    val = int(round(checked)) if field in ("quantity", "rope_falls") else checked
                 if not isinstance(val, (int, float)) or val < 0 or (val == 0 and field not in _ZERO_OK):
                     rejected.append(RejectedValue(field=path, reason=f"value {val} is not valid"))
                     continue

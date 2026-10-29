@@ -27,6 +27,7 @@ from app.ai.sizing_parser import get_sizing_parser, SizingParseResult, ProviderE
 from app.engine.method_eval import MethodPlan, validate_plan
 from app.engine.project import ProjectPlan, repair_project, shredder_template, map_requested
 from app.engine.conveyor_template import bulk_conveyor_template
+from app.engine.quote_units import checked_value
 
 logger = logging.getLogger(__name__)
 
@@ -226,6 +227,7 @@ BEARING_INSTRUCTION = (
 )
 
 _N = r"(\d+(?:\.\d+)?)"
+_BEARING_UNITS = {"radial_load_n": "N", "axial_load_n": "N", "dynamic_rating_kn": "kN"}
 
 
 def _mock_bearing(text: str) -> BearingExtraction:
@@ -279,8 +281,10 @@ def extract_bearing(text: str) -> List[ExtractedField]:
             continue
         if field == "bearing_type" and val not in ("ball", "roller"):
             continue
-        if field != "bearing_type" and (not isinstance(val, (int, float)) or val < 0 or not re.search(r"\d", q)):
-            continue
+        if field != "bearing_type":   # the tool converts the user's words itself
+            val = checked_value(q, val, _BEARING_UNITS.get(field))
+            if val is None or val < 0:
+                continue
         out.append(ExtractedField(field=field, value=val, quote=q))
     return out
 
@@ -295,20 +299,30 @@ METHOD_INSTRUCTION = (
     "formulas. Rules: "
     "1) Do NOT compute any results yourself — only write formulas; the tool evaluates them. "
     "2) Formulas may use only earlier symbols, numbers, + - * / ** and the listed maths functions, with unit "
-    "conversion factors written explicitly so units are consistent. "
+    "conversion factors written explicitly as plain numbers so units are consistent. Never write unit names, "
+    "comparisons or if/else inside a formula — choose between values with min() or max(). "
     "3) Fill an input's value only if the user stated it, and copy their exact words into quote. "
     "4) You may give a typical_value with a typical_note (source and usual range) for material or catalogue "
     "properties, but never for the user's own dimensions, loads, speeds or operating conditions. "
-    "5) Name the standard in `standard` and list limitations honestly. Keep it to the steps an engineer would show."
+    "5) Name the standard in `standard` and list limitations honestly. Keep it to the steps an engineer would show. "
+    "6) If the text is not an engineering calculation question, return no steps."
 )
 
+NOT_A_CALCULATION = ("This does not look like an engineering calculation question. Describe the part or machine, "
+                     "the loads, speeds or sizes you know, and what you want to find — for example "
+                     "'Shaft diameter for 400 N·m torque, 4140 steel'.")
 
-def plan_method(text: str, country: str = "", standard: str = "", scope: str = "") -> MethodPlan:
-    plan = call_structured(MethodPlan, METHOD_INSTRUCTION + standards_context(country, standard, scope), text)
+
+def plan_method(text: str, country: str = "", standard: str = "", scope: str = "",
+                problems: Optional[List[str]] = None) -> MethodPlan:
+    retry = (" YOUR PREVIOUS PLAN FOR THIS QUESTION WAS REJECTED by the tool's checker: " + " ".join(problems[:5])
+             + " Return a corrected plan that follows rules 1-2 exactly.") if problems else ""
+    plan = call_structured(MethodPlan, METHOD_INSTRUCTION + standards_context(country, standard, scope) + retry, text)
     norm_text = _norm(text)
     for i in plan.inputs:   # a value counts as "given" only if the user's words are really in the text
-        if i.value is not None and not (i.quote and _norm(i.quote) in norm_text and re.search(r"\d", i.quote)):
-            i.value, i.quote = None, None
+        if i.value is not None:
+            v = checked_value(i.quote, i.value, i.unit) if i.quote and _norm(i.quote) in norm_text else None
+            i.value, i.quote = (v, i.quote) if v is not None else (None, None)
         if _from_standard(i.typical_note):   # a factor from the standard's tables: the engineer enters it
             i.typical_value = None
     _add_gap_note(plan, standard)
@@ -600,7 +614,12 @@ def ask(text: str, country: str = "", standard: str = "", scope: str = "") -> As
         else:
             plan = plan_method(text, country, standard, scope)
             problems = validate_plan(plan)
-            if problems:
+            if problems and plan.steps:   # one more try, telling the AI what the checker rejected
+                plan = plan_method(text, country, standard, scope, problems)
+                problems = validate_plan(plan)
+            if not plan.steps:
+                res.status, res.message = "NOT_A_CALCULATION", NOT_A_CALCULATION
+            elif problems:
                 res.status, res.message = "INVALID_PLAN", ("The AI's method could not be checked, so it was not used: "
                                                            + " ".join(problems[:3]) + " Try rephrasing the question.")
             else:
