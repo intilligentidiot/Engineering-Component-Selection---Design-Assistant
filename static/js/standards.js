@@ -131,6 +131,7 @@
     };
     const COUNTRIES = Object.keys(STANDARDS);
     const OTHER = "__other__";
+    const GENERAL = "General engineering mechanics";   // explicit choice for work no design standard covers
 
     // Where a project's country commonly uses a different standard for the same check
     const REGION_NOTES = [
@@ -185,7 +186,7 @@
             `<button type="button" class="std-chip ${cls}${code === current ? " is-on" : ""}" data-std="${esc(code)}" title="${esc(what)}">${esc(code)} — ${esc(what)}</button>`;
         box.innerHTML =
             (design.length ? `<div><strong>Suggested for your question (${esc(country)}):</strong> click one to use it.<div class="std-chips">${design.map(d => chip(d)).join("")}</div></div>` : "") +
-            (missing.length ? `<div>No ${esc(country)} standard in the list for ${esc(missing.join(", "))} — leave it as None, or choose "Other" and type the one the customer uses.</div>` : "") +
+            (missing.length ? `<div>No ${esc(country)} standard in the list for ${esc(missing.join(", "))} — choose "Other" and type the one the customer uses, or ${esc(GENERAL)}.</div>` : "") +
             (safety.length ? `<div style="margin-top:0.35rem">Also check (safety — no calculations in it):<div class="std-chips">${safety.map(s => chip(s, "is-safety")).join("")}</div></div>` : "");
         box.hidden = false;
     }
@@ -243,6 +244,51 @@
         return [country && `Country: ${country}`, customer && `Customer standard: ${customer}`].filter(Boolean).join(" · ");
     }
 
+    // ── One selected standard rules every calculation ──
+    const NEED_MSG = "Select a standard to calculate. Results depend on the standard you choose.";
+    const GATED = "#sz-ai-btn, #as-calc, #pj-calc, #sz-submit-btn";
+
+    // Calculate buttons stay disabled until a standard is selected; `nudge` also points the engineer to the list
+    function gate(nudge = false) {
+        const ok = !!get().customer;
+        document.querySelectorAll(GATED).forEach(b => {
+            b.classList.toggle("is-blocked", !ok);
+            b.setAttribute("aria-disabled", String(!ok));
+            b.title = ok ? "" : NEED_MSG;
+        });
+        const msg = $("std-required-msg");
+        if (msg) { msg.textContent = NEED_MSG; msg.hidden = ok; msg.classList.toggle("nudge", nudge && !ok); }
+        if (nudge && !ok) {
+            const target = $("std-country")?.value ? $("std-customer") : $("std-country");
+            target?.scrollIntoView({ behavior: "smooth", block: "center" });
+            target?.focus();
+        }
+    }
+
+    // A changed standard clears every result made with the old one
+    function clearResults(now) {
+        const shown = ["as-area", "pj-area", "as-result-panel", "sz-proof-panel", "shared-results"]
+            .some(id => $(id) && !$(id).hidden);
+        if (!shown) return;
+        window.Assistant?.hide();
+        window.Project?.hide();
+        ["as-result-panel", "sz-proof-panel", "shared-results"].forEach(id => { if ($(id)) $(id).hidden = true; });
+        const fb = $("sz-ai-feedback");
+        if (fb) {
+            fb.className = "sz-note warn";
+            fb.innerHTML = now
+                ? `<strong>Standard changed to ${esc(now)} — the previous result was cleared.</strong> Press Continue to calculate with ${esc(now)}.`
+                : `<strong>The previous result was cleared.</strong> ${esc(NEED_MSG)}`;
+            fb.hidden = false;
+        }
+    }
+
+    // "Calculated using: …" line shown with every result
+    function usedLine(detail = "") {
+        const s = get().customer;
+        return s ? `<div class="used-line">Calculated using: <strong>${esc(s)}</strong>${detail ? ` <span>· ${esc(detail)}</span>` : ""}</div>` : "";
+    }
+
     // Fill the standard list with the chosen country's standards only
     function fillStandards(country, keep) {
         const sel = $("std-customer"), other = $("std-customer-other");
@@ -250,14 +296,15 @@
         if (!country) {
             sel.innerHTML = `<option value="">Choose a project country first</option>`;
             sel.disabled = true;
-        } else {
+        } else {   // no default: the engineer must pick one (General mechanics is a deliberate choice, never pre-selected)
             sel.disabled = false;
-            sel.innerHTML = `<option value="">None / not specified</option>` +
+            sel.innerHTML = `<option value="" disabled>Select a standard…</option>` +
+                `<option value="${esc(GENERAL)}">${esc(GENERAL)} — no design standard</option>` +
                 `<optgroup label="${esc(country)}">` +
                 list.map(([code, what]) => `<option value="${esc(code)}">${esc(code)} — ${esc(what)}</option>`).join("") +
                 `</optgroup><option value="${OTHER}">Other (type it)…</option>`;
         }
-        if (keep && list.some(([code]) => code === keep)) { sel.value = keep; other.value = ""; }
+        if (keep && (keep === GENERAL || list.some(([code]) => code === keep))) { sel.value = keep; other.value = ""; }
         else if (keep && country) { sel.value = OTHER; other.value = keep; }
         else { sel.value = ""; other.value = ""; }
         other.hidden = sel.value !== OTHER;
@@ -270,9 +317,14 @@
         country.value = COUNTRIES.includes(load(KEY_C)) ? load(KEY_C) : "";
         fillStandards(country.value, load(KEY_S));
 
+        let last = get().customer;
         const changed = () => {
             save(KEY_C, country.value);
             save(KEY_S, get().customer);
+            const now = get().customer;
+            if (now !== last) clearResults(now);   // a result is never shown next to a different standard
+            last = now;
+            gate();
             document.dispatchEvent(new Event("standards-change"));
         };
         country.addEventListener("change", () => { fillStandards(country.value, ""); changed(); });   // a new country starts with no standard
@@ -282,6 +334,21 @@
             changed();
         });
         other.addEventListener("change", changed);
+        other.addEventListener("input", gate);
+
+        // Nothing is calculated until a standard is selected
+        document.addEventListener("click", e => {
+            const b = e.target.closest(GATED);
+            if (!b || get().customer) return;
+            e.preventDefault(); e.stopImmediatePropagation();
+            gate(true);
+        }, true);
+        document.addEventListener("submit", e => {
+            if (get().customer || !e.target.closest("#sizing-form")) return;
+            e.preventDefault(); e.stopImmediatePropagation();
+            gate(true);
+        }, true);
+        gate();
 
         // Suggested standards follow the question text and the country
         let timer;
@@ -297,5 +364,6 @@
     }
 
     document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", init) : init();
-    window.Standards = { get, noteFor, regionalFor, equivalentFor, summaryText, suggest, scopeOf, COUNTRIES, STANDARDS };
+    window.Standards = { get, noteFor, regionalFor, equivalentFor, summaryText, suggest, scopeOf, usedLine, gate,
+                         GENERAL, COUNTRIES, STANDARDS };
 })();

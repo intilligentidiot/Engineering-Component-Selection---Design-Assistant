@@ -96,7 +96,7 @@
             (data.bearing_values || []).forEach(v => { values[v.field] = v.value; quotes[v.field] = v.quote; });
             if (values.reliability_pct !== undefined) values.reliability_pct = String(values.reliability_pct);
             banner.innerHTML = `<div class="as-head">
-                <div class="as-head-tags"><span class="tag tag-ok">Checked calculation</span><span class="tag tag-std">ISO 281</span></div>
+                <div class="as-head-tags"><span class="tag tag-ok">Checked calculation</span><span class="tag tag-std">${esc(std())}</span></div>
                 <h2 class="as-head-title">Bearing life</h2>
                 <p class="as-head-sum">Basic rating life of a rolling bearing, built into the tool.</p></div>`;
             calcBtn.textContent = "Calculate bearing life";
@@ -109,7 +109,7 @@
                 }
             });
             banner.innerHTML = `<div class="as-head">
-                <div class="as-head-tags"><span class="tag tag-ai">AI method — check before use</span>${plan.standard ? `<span class="tag tag-std">${esc(plan.standard)}</span>` : ""}</div>
+                <div class="as-head-tags"><span class="tag tag-ai">AI method — check before use</span><span class="tag tag-std">${esc(std())}</span></div>
                 <h2 class="as-head-title">${esc(plan.title)}</h2>
                 <p class="as-head-sum">${esc(plan.summary)}</p>
                 <p class="as-head-note">The AI chose the method; the tool does every calculation from your numbers and shows each step.</p></div>`;
@@ -188,9 +188,12 @@
     // ── Calculate ────────────────────────────────────────────
     calcBtn.addEventListener("click", async () => {
         calcBtn.disabled = true;
+        const sentStd = std();
+        const stale = () => sentStd !== std() || area.hidden;   // the standard changed meanwhile: never show this result
         try {
             if (topic === "bearing_life") {
                 const r = await post("/api/bearing-life", buildBearing());
+                if (stale()) return;
                 if (r.status === "REQUIREMENTS_INCOMPLETE" || r.status === "INVALID_INPUT") {
                     await refresh(true);
                     if (r.errors?.length) showProblems(r.errors);
@@ -200,6 +203,7 @@
             } else {
                 const vals = Object.fromEntries(plan.inputs.map(i => [i.symbol, filled(i.symbol) ? Number(values[i.symbol]) : null]));
                 const r = await post("/api/evaluate-method", { plan, values: vals });
+                if (stale()) return;
                 if (r.status === "REQUIREMENTS_INCOMPLETE") { await refresh(true); return; }
                 if (r.status !== "CALCULATED") { showProblems(r.errors || ["The calculation could not be completed."]); return; }
                 renderMethod(r);
@@ -222,17 +226,19 @@
         <div class="rs-key-val">${Units.family(unit) ? Units.valueHtml(val, unit) : `${fmt(val)} <span class="rs-unit">${esc(unit)}</span>`}</div>
         ${subtext ? `<div class="rs-key-sub">${esc(subtext)}</div>` : ""}</div>`;
     // Each step: what it is, the formula as an engineer writes it, the numbers put in, the result
+    const std = () => window.Standards ? Standards.get().customer : "";
     const stepsHtml = steps => `<ol class="rs-steps">${steps.map((s, i) => `
         <li class="rs-step">
             <div class="rs-step-n">${i + 1}</div>
             <div class="rs-step-body">
-                <div class="rs-step-name">${esc(s.label || s.name)}${s.note ? `<span class="rs-step-note">${esc(s.note)}</span>` : ""}</div>
+                <div class="rs-step-name">${esc(s.label || s.name)} <span class="tag tag-std step-std">${esc(std())}</span>${s.note ? `<span class="rs-step-note">${esc(s.note)}</span>` : ""}</div>
                 ${MathFmt.block(s.formula, "rs-formula")}
                 ${MathFmt.block(s.substitution, "rs-subst")}
                 ${Units.stepConversionHtml([], s.symbol || s.key || "", s.result, s.unit)}
             </div>
         </li>`).join("")}</ol>${Units.legendHtml(steps.map(s => s.unit))}`;
     const section = (heading, inner, extra = "") => inner ? `<section class="rs-section"><h3>${esc(heading)}${extra ? ` <span>${esc(extra)}</span>` : ""}</h3>${inner}</section>` : "";
+    const details = inner => `<details class="calc-details"><summary>Show calculation details</summary><div class="calc-details-body">${inner}</div></details>`;
     const fold = (heading, items) => items.length ? `<details class="rs-fold"><summary>${esc(heading)} <span>(${items.length})</span></summary><ul>${items.map(x => `<li>${esc(x)}</li>`).join("")}</ul></details>` : "";
 
     // Every input the calculation used, with where its value came from
@@ -254,31 +260,31 @@
     let lastShown = null;
     function redraw() {
         if (!lastShown || panel.hidden) return;
-        const open = body.querySelector("details.rs-fold")?.open;
+        const open = [...body.querySelectorAll("details")].map(d => d.open);
         lastShown[0](lastShown[1], true);
-        const d = body.querySelector("details.rs-fold");
-        if (d && open) d.open = true;
+        body.querySelectorAll("details").forEach((d, i) => { if (open[i]) d.open = true; });
     }
     Units.onChange(redraw);
-    document.addEventListener("standards-change", redraw);   // country / customer standard changed
-    const stdNote = (standard, ai) => window.Standards ? Standards.noteFor(standard, ai) : "";
+    const usedLine = detail => window.Standards ? Standards.usedLine(detail) : "";
 
     function renderBearing(r, quiet = false) {
         lastShown = [renderBearing, r];
         const badge = { MEETS: "MEETS", DOES_NOT_MEET: "DOES_NOT_MEET" }[r.status];
         title.innerHTML = r.min_dynamic_rating_kn != null ? "Minimum bearing rating needed"
             : `Bearing life${badge ? ` &nbsp;<span class="data-status ${badge}">${badge.replace(/_/g, " ")}</span>` : ""}`;
-        sub.textContent = "ISO 281 basic rating life — checked calculation built into the tool.";
+        sub.textContent = "Basic rating life — checked calculation built into the tool.";
+        const named = t => String(t).replace(/ISO 281/g, std() || "ISO 281");
         body.innerHTML = `
             <div class="rs-keys">
                 ${r.life_h != null ? card("Expected life", r.life_h, "h", `at ${values.reliability_pct || 90} % reliability`, "main") : ""}
                 ${r.min_dynamic_rating_kn != null ? card("Minimum rating C", r.min_dynamic_rating_kn, "kN", "choose a bearing with at least this C", "main") : ""}
                 ${card("Equivalent load P", r.equivalent_load_n, "N")}
             </div>
+            ${usedLine("basic rating life")}
             ${(() => { const eq = window.Standards?.equivalentFor("ISO 281", values.bearing_type);
-                       return eq?.note ? `<div class="std-note">${esc(eq.note)}</div>` : stdNote("ISO 281", false); })()}
-            ${section("Calculation", stepsHtml(r.steps), `${r.steps.length} steps`)}
-            ${fold("Notes", r.notes || [])}`;
+                       return eq?.note && /covers/.test(eq.note) ? `<div class="std-note">${esc(eq.note.replace(/^.*?(Note:)/, "$1"))}</div>` : ""; })()}
+            ${details(section("Calculation", stepsHtml(r.steps), `${r.steps.length} steps`))}
+            ${fold("Notes", (r.notes || []).map(named))}`;
         panel.hidden = false;
         if (!quiet) panel.scrollIntoView({ behavior: "smooth", block: "start" });
     }
@@ -286,15 +292,14 @@
     function renderMethod(r, quiet = false) {
         lastShown = [renderMethod, r];
         title.textContent = plan.title;
-        sub.innerHTML = `<span class="tag tag-ai">AI method — check before use</span>${plan.standard ? `<span class="tag tag-std">${esc(plan.standard)}</span>` : ""}`;
+        sub.innerHTML = `<span class="tag tag-ai">AI method — check before use</span>`;
         const suggested = Object.keys(typical).filter(filled).length;
         body.innerHTML = `
             <div class="rs-keys">${r.results.map(s => card(s.name, s.result, s.unit, "", "main")).join("")}</div>
-            <div class="rs-check"><strong>Check before use.</strong> The AI chose these formulas; the tool calculated every number.
-                Verify the method, units${suggested ? ` and the ${suggested} AI-suggested value${suggested > 1 ? "s" : ""}` : ""} before relying on the result.
-                ${stdNote(plan.standard, true)}</div>
-            ${section("Inputs used", inputsTable())}
-            ${section("Calculation", stepsHtml(r.steps), `${r.steps.length} steps`)}
+            ${usedLine(plan.standard && plan.standard !== std() ? plan.standard : "")}
+            <div class="rs-check"><strong>Check before use.</strong> The AI wrote these formulas from ${esc(std())}; the tool calculated every number.
+                Verify the method, units${suggested ? ` and the ${suggested} AI-suggested value${suggested > 1 ? "s" : ""}` : ""} before relying on the result.</div>
+            ${details(section("Inputs used", inputsTable()) + section("Calculation", stepsHtml(r.steps), `${r.steps.length} steps`))}
             ${fold("Limitations of this method", plan.limitations || [])}`;
         panel.hidden = false;
         if (!quiet) panel.scrollIntoView({ behavior: "smooth", block: "start" });

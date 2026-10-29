@@ -287,6 +287,13 @@
             const std = window.Standards ? Standards.get() : { country: "", customer: "" };
             const asked = await post("/api/ask", { text, country: std.country, standard: std.customer,
                                                    standard_scope: window.Standards ? Standards.scopeOf(std.country, std.customer) : "" });
+            // Never show an answer made for a standard that is no longer the selected one
+            if (window.Standards && (asked.standard || "") !== Standards.get().customer) {
+                aiFeedback.className = "sz-note warn";
+                aiFeedback.innerHTML = "<strong>The standard was changed while this was being prepared.</strong> Press Continue to calculate with the selected standard.";
+                aiFeedback.hidden = false;
+                return;
+            }
             if (asked.topic !== "motor_sizing") {
                 setMode("start"); aiFeedback.hidden = true;
                 proofPanel.hidden = true; resultsPanel.hidden = true; errorPanel.hidden = true;
@@ -573,13 +580,14 @@
                 ${card("Turning force (torque)", r.design_torque_nm, "N·m", `Includes a ${fmt(r.service_factor)}× safety margin`, "key")}
                 ${card("Power", r.required_power_w, "W", "At the gearbox output")}
             </div>
+            ${window.Standards ? Standards.usedLine("basic mechanics: motion, friction and inertia — no factor from a design standard") : ""}
             ${list(sized.warnings, "danger", "Safety notes")}
             ${list([...(sized.suggested_used || []),
                     ...(suggested.has("limits.max_voltage_v") ? [`Supply voltage: ${values["limits.max_voltage_v"]} V (suggested) — ${suggested.get("limits.max_voltage_v")}`] : [])],
                    "info", "Typical values we used because you didn't give them — please check")}
             ${list(sized.assumptions, "warn", "Things we assumed because you didn't mention them — change them under “Edit all details” if wrong")}
-            <details class="sz-details">
-                <summary>Show the full calculation (${sized.steps.length} steps)</summary>
+            <details class="sz-details calc-details">
+                <summary>Show calculation details</summary>
                 <div class="sz-req-grid">
                     ${card("Continuous torque", r.required_torque_nm, "N·m", "before safety margin")}
                     ${card("Peak torque", r.peak_torque_nm, "N·m", "while speeding up")}

@@ -28,6 +28,7 @@ from app.engine.method_eval import MethodPlan, validate_plan
 from app.engine.project import ProjectPlan, repair_project, shredder_template, map_requested
 from app.engine.conveyor_template import bulk_conveyor_template
 from app.engine.quote_units import checked_value
+from app.engine.standard_rules import GENERAL, allowed, foreign_codes, is_general
 
 logger = logging.getLogger(__name__)
 
@@ -360,6 +361,29 @@ def standard_gap_note(standard: Optional[str]) -> str:
             f"and ask the customer which design standard applies to the calculations.")
 
 
+def plan_standard_problems(plan: MethodPlan, standard: Optional[str]) -> List[str]:
+    """The AI's method must come from the selected standard only (or, for General engineering mechanics,
+    from no named standard). Returns why it does not; an empty list means the plan may be shown."""
+    standard = _clean(standard)
+    if not standard:
+        return []
+    cited_text = " ".join([s.note or "" for s in plan.steps] +
+                          [i.typical_note or "" for i in plan.inputs if _from_standard(i.typical_note)])
+    if is_general(standard):
+        cited = foreign_codes(f"{plan.standard or ''} {cited_text}", standard)
+        if cited:
+            return [f"{GENERAL} was selected, but the method uses {', '.join(cited)}."]
+        plan.standard = GENERAL
+        return []
+    problems = []
+    if not plan.standard or re.search(r"\bnot\b", plan.standard, re.IGNORECASE) or not allowed(plan.standard, standard):
+        problems.append(f"The method is not {standard} (it says '{plan.standard or 'no standard'}').")
+    cited = foreign_codes(cited_text, standard)
+    if cited:
+        problems.append(f"Steps or factors cite {', '.join(cited)}, not {standard}.")
+    return problems
+
+
 def _add_gap_note(plan, standard: Optional[str]) -> None:
     note = standard_gap_note(standard)
     if note and note not in plan.limitations:
@@ -375,22 +399,26 @@ def standards_context(country: Optional[str], standard: Optional[str], scope: Op
     if not country and not standard:
         return ""
     where = f" The machine is for {country}." if country else ""
+    if is_general(standard):
+        return (f" PROJECT STANDARD:{where} The engineer selected '{GENERAL}' — no design standard. Use only general "
+                f"engineering mechanics (statics, strength of materials, textbook design formulas). Do NOT use, cite or "
+                f"take any factor or value from any named standard (ISO, DIN, EN, AS, ASME, AGMA, …). Write "
+                f"'{GENERAL}' in the standard field. Material properties may be typical values with a typical_note.")
     if standard:
-        return (f" PROJECT STANDARD:{where} The customer requires {standard}"
+        return (f" PROJECT STANDARD:{where} The engineer selected {standard}"
                 + (f" (what it covers: {scope}). Rely on this description; do not guess what {standard} is about. "
                    if scope else ". ") +
-                f"a) Use {standard}'s calculation method for every calculation it covers and write '{standard}' "
-                f"(with the clause if you know it) in that calculation's standard field; for calculations it does not "
-                f"cover, use another recognised method and name it. "
-                f"b) Every factor, coefficient, allowable stress or partial safety factor that comes from the tables, "
-                f"charts or clauses of a standard must be an input with value null and NO typical_value, whose "
-                f"source_hint (or typical_note) says 'From <standard and clause> — {_FROM_COPY} of the standard'. "
-                f"Never supply those numbers yourself. "
-                f"c) If {standard} is a safety, legal or procedure standard with no calculation method, or its method "
-                f"relies on detailed rules you cannot reproduce exactly, say so as the first limitation, then use a "
-                f"generally accepted method and state clearly that it is not {standard}."
-                + (f" Note: {standard} is a safety, legal or procedure standard — it has no calculation method, "
-                   f"so do not write it in any calculation's standard field." if standard_gap_note(standard) else ""))
+                f"ONE STANDARD ONLY: a) Every calculation must come from {standard} alone. Write '{standard}' in the "
+                f"standard field, and start every step's note with '{standard}' and the clause or table it comes from. "
+                f"Basic physics (equilibrium, unit conversion, power = torque × speed) may be used as steps of the "
+                f"{standard} method. Never use, cite or borrow a method, factor or value from any other standard. "
+                f"b) Every factor, coefficient, allowable stress or partial safety factor from {standard}'s tables, "
+                f"charts or clauses must be an input with value null and NO typical_value, whose source_hint (or "
+                f"typical_note) says 'From {standard} <clause> — {_FROM_COPY} of the standard'. Never supply those "
+                f"numbers yourself. "
+                f"c) If {standard} does not define this calculation (for example a safety, legal or procedure "
+                f"standard, or a topic outside its scope), write exactly 'NOT DEFINED IN {standard}' in the standard "
+                f"field, explain why in limitations, and return no steps. Never substitute another method.")
     return (f" PROJECT COUNTRY:{where} Prefer calculation methods and standards commonly used there and name them. "
             f"Every factor, coefficient, allowable stress or partial safety factor that comes from the tables, charts "
             f"or clauses of a standard must be an input with value null and NO typical_value, whose source_hint (or "
@@ -598,7 +626,14 @@ class AskResult(BaseModel):
     plan: Optional[MethodPlan] = None
     project: Optional[ProjectPlan] = None
     message: Optional[str] = None
-    status: str = "OK"   # OK | AI_NOT_CONFIGURED | INVALID_PLAN | ERROR
+    standard: str = ""   # the standard this answer was made for (the page checks it is still the selected one)
+    status: str = "OK"   # OK | AI_NOT_CONFIGURED | INVALID_PLAN | NOT_A_CALCULATION | NOT_DEFINED | STANDARD_MISMATCH | ERROR
+
+
+def not_defined(standard: str, what: str, why: str = "", general_helps: bool = True) -> str:
+    return (f"Not defined in {standard}: {what}{' ' + why if why else ''} Nothing is calculated, because values are "
+            f"never borrowed from another standard. Choose a standard that covers it"
+            f"{f', or {GENERAL}' if general_helps and not is_general(standard) else ''}.")
 
 
 AI_OFF_MESSAGE = ("This question needs the AI to choose a calculation method, and the AI is not switched on for "
@@ -610,8 +645,20 @@ AI_OFF_MESSAGE = ("This question needs the AI to choose a calculation method, an
 def ask(text: str, country: str = "", standard: str = "", scope: str = "") -> AskResult:
     provider = _provider()
     r = route(text)
-    res = AskResult(topic=r.topic, reason=r.reason, provider=provider)
+    standard = _clean(standard)
+    res = AskResult(topic=r.topic, reason=r.reason, provider=provider, standard=standard)
     try:
+        # One selected standard: refuse topics it does not define before spending on the AI
+        if standard and r.topic == "bearing_life" and not allowed("ISO 281", standard):
+            res.status, res.message = "NOT_DEFINED", not_defined(
+                standard, "bearing rating life.", "The tool's bearing-life check follows ISO 281 (the same method as "
+                "ANSI/ABMA Std 9 for ball and Std 11 for roller bearings).", general_helps=False)
+            return res
+        if standard and r.topic == "general" and standard_gap_note(standard):
+            res.status, res.message = "NOT_DEFINED", not_defined(
+                standard, "this calculation.", f"{standard} is a safety, legal or procedure standard with no "
+                "calculation method.")
+            return res
         if r.topic == "project":
             project = plan_project(text, country, standard, scope)
             problems = repair_project(project)
@@ -627,14 +674,24 @@ def ask(text: str, country: str = "", standard: str = "", scope: str = "") -> As
         else:
             plan = plan_method(text, country, standard, scope)
             problems = validate_plan(plan)
-            if problems and plan.steps:   # one more try, telling the AI what the checker rejected
-                plan = plan_method(text, country, standard, scope, problems)
+            std_problems = plan_standard_problems(plan, standard) if plan.steps and not problems else []
+            if (problems or std_problems) and plan.steps:   # one more try, telling the AI what the checker rejected
+                plan = plan_method(text, country, standard, scope, problems + std_problems)
                 problems = validate_plan(plan)
-            if not plan.steps:
+                std_problems = plan_standard_problems(plan, standard) if plan.steps and not problems else []
+            if standard and re.match(r"\s*not defined", plan.standard or "", re.IGNORECASE):
+                why = plan.limitations[0] if plan.limitations else ""
+                res.status, res.message = "NOT_DEFINED", not_defined(standard, "this calculation.", why)
+            elif not plan.steps:
                 res.status, res.message = "NOT_A_CALCULATION", NOT_A_CALCULATION
             elif problems:
                 res.status, res.message = "INVALID_PLAN", ("The AI's method could not be checked, so it was not used: "
                                                            + " ".join(problems[:3]) + " Try rephrasing the question.")
+            elif std_problems:
+                res.status, res.message = "STANDARD_MISMATCH", (
+                    f"No result is shown: the calculation could not be built from {standard} alone ("
+                    + " ".join(std_problems[:2]) + ") Values are never borrowed from another standard. "
+                    f"Choose another standard{'' if is_general(standard) else f', or {GENERAL}'}.")
             else:
                 res.plan = plan
     except ProviderError as e:

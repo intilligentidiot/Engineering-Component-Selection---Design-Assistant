@@ -50,6 +50,14 @@
 
     window.MathFmt = { html, block, name };
 
+    // "Show calculation details" / "Hide calculation details" — opens and closes without recalculating
+    document.addEventListener("toggle", e => {
+        const d = e.target;
+        if (!(d instanceof HTMLDetailsElement) || !d.classList.contains("calc-details")) return;
+        const s = d.querySelector(":scope > summary");
+        if (s) s.textContent = d.open ? "Hide calculation details" : "Show calculation details";
+    }, true);
+
     // Example questions under the main box fill it in
     document.addEventListener("click", e => {
         const chip = e.target.closest("[data-example]");

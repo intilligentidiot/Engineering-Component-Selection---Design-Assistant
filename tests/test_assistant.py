@@ -131,7 +131,7 @@ def test_customer_standard_is_given_to_the_ai_and_its_factors_are_left_to_the_en
     assistant._CACHE.clear()
     monkeypatch.setenv("AI_PROVIDER", "gemini")
     monkeypatch.setenv("GEMINI_API_KEY", "k")
-    plan = _shaft_plan(inputs=[
+    plan = _shaft_plan(standard="AS 1403", inputs=[
         PlanInput(symbol="T", name="Torque", unit="N·m", value=50, quote="50 Nm"),
         PlanInput(symbol="tau_allow", name="Allowable shear stress", unit="MPa", typical_value=40,
                   typical_note="From AS 1403 clause 5 — enter from your copy of the standard")])
@@ -161,24 +161,19 @@ def test_ask_endpoint_accepts_country_and_standard():
     assert data["topic"] == "motor_sizing"
 
 
-def test_safety_standard_gets_a_tool_written_warning_even_if_the_ai_forgets(monkeypatch):
+def test_safety_standard_defines_no_calculation_so_nothing_is_calculated(monkeypatch):
     from app.ai import assistant
     assistant._CACHE.clear()
     monkeypatch.setenv("AI_PROVIDER", "gemini")
     monkeypatch.setenv("GEMINI_API_KEY", "k")
-    plan = _shaft_plan(inputs=[
-        PlanInput(symbol="T", name="Torque", unit="N·m", value=50, quote="50 Nm"),
-        PlanInput(symbol="tau_allow", name="Allowable shear stress", unit="MPa", typical_value=40)])
-    plan.limitations = ["Static loading only.",
-                        "AS 4024.1 is a safety standard and does not provide calculation methods for shafts."]
     routing = MagicMock(); routing.parsed = MagicMock(topic="general", reason="Shaft sizing.")
-    planned = MagicMock(); planned.parsed = plan
     with patch("app.ai.gemini_parser.genai") as genai:
-        genai.Client.return_value.models.generate_content.side_effect = [routing, planned]
+        gen = genai.Client.return_value.models.generate_content
+        gen.side_effect = [routing]
         r = ask("shaft diameter for 50 Nm torque", country="Australia", standard="AS 4024.1")
-    assert r.plan.limitations[0].startswith("AS 4024.1 is a safety")
-    assert "NOT AS 4024.1" in r.plan.limitations[0]
-    assert r.plan.limitations[1:] == ["Static loading only."]   # the AI's own copy of the warning is dropped
+    assert r.status == "NOT_DEFINED" and r.plan is None
+    assert r.message.startswith("Not defined in AS 4024.1")
+    assert gen.call_count == 1          # no AI method was even requested
     assistant._CACHE.clear()
 
 

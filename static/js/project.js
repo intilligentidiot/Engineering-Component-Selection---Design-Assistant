@@ -35,8 +35,7 @@
             <p class="as-head-sum">${esc(plan.summary)}</p>
             <p class="as-head-note">${ai ? "The AI chose the methods; the tool does every calculation and shows each step."
                 : "Motor + gearbox selection and bearing life use the tool's checked calculations."}</p>
-            <div id="pj-std-summary"></div></div>`;
-        stdSummary();
+            ${std() ? Standards.usedLine("every step below names it; basic physics steps hold under any standard") : ""}</div>`;
         renderInfo();
         $("pj-limits").innerHTML = (plan.limitations || []).length
             ? `<details class="rs-fold"><summary>Limitations of this plan <span>(${plan.limitations.length})</span></summary><ul>${plan.limitations.map(x => `<li>${esc(x)}</li>`).join("")}</ul></details>` : "";
@@ -45,17 +44,10 @@
         area.scrollIntoView({ behavior: "smooth", block: "start" });
     }
 
-    // Project country / customer standard (static/js/standards.js)
-    function stdSummary() {
-        const el = $("pj-std-summary");
-        const s = window.Standards ? Standards.summaryText() : "";
-        if (el) el.innerHTML = s ? `<div class="std-note">${esc(s)}. Each calculation names the standard it follows — confirm they are accepted for this project.</div>` : "";
-    }
-    document.addEventListener("standards-change", () => {
-        if (!plan || area.hidden) return;
-        stdSummary();
-        if (lastResult) renderCalcs(lastResult);
-    });
+    // The engineer's selected standard (static/js/standards.js); a change clears this page
+    const std = () => window.Standards ? Standards.get().customer : "";
+    const GENERAL = "General engineering mechanics";
+    const methodKind = c => !c.standard ? "physics" : c.standard.startsWith(GENERAL) ? "general" : "standard";
 
     // A value with its unit as plain text (for sentences — no unit selector)
     const plain = (v, u) => v == null ? "—" : `${Units.fmt(Units.convert(v, u, Units.displayUnit(u)))} ${Units.displayUnit(u)}`;
@@ -168,13 +160,15 @@
     async function evaluate() {
         const vals = Object.fromEntries(plan.inputs.map(i => [i.symbol, values[i.symbol] === undefined || values[i.symbol] === "" ? null : Number(values[i.symbol])]));
         let r;
+        const sentStd = std();
         try {
-            const res = await fetch(`${API}/api/project-evaluate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ plan, values: vals, include_internet: $("pj-internet").checked }) });
+            const res = await fetch(`${API}/api/project-evaluate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ plan, values: vals, include_internet: $("pj-internet").checked, standard: std() }) });
             r = await res.json();
             if (!res.ok) throw new Error(typeof r.detail === "string" ? r.detail : "The plan could not be calculated.");
         } catch (err) {
             calcs.innerHTML = `<div class="sz-note danger">${esc(err.message)}</div>`; return;
         }
+        if (sentStd !== std() || area.hidden) return;   // the standard changed meanwhile: never show this result
         if (r.status !== "EVALUATED") { calcs.innerHTML = `<div class="sz-note danger"><ul>${(r.errors || []).map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>`; return; }
         renderInfo();
         renderAsked(r);
@@ -210,6 +204,8 @@
             if (inp && values[q.symbol] !== undefined && values[q.symbol] !== "")
                 return `<div class="pj-res"><span>${esc(q.text)}</span><strong>${Units.valueHtml(Number(values[q.symbol]), inp.unit)}</strong></div>`;
             const f = from[q.symbol];
+            if (f && f.res.status === "NOT_DEFINED")
+                return `<div class="pj-res"><span>${esc(q.text)}</span><strong class="pj-none"><span class="pill-nd">not defined in ${esc(std())}</span></strong></div>`;
             const needs = f && f.res.status === "WAITING" ? f.res.waiting_for : [];
             const pill = needs.length ? `<span class="pill-wait" title="Waiting for: ${esc(needs.join(", "))}">needs ${needs.length} more input${needs.length > 1 ? "s" : ""}</span>`
                                       : `<span class="pill-wait">waiting for information</span>`;
@@ -222,7 +218,8 @@
     }
 
     const badge = s => ({ DONE: `<span class="data-status MEETS">DONE</span>`, WAITING: `<span class="data-status DISCOVERED">WAITING</span>`,
-                          ERROR: `<span class="data-status DOES_NOT_MEET">CHECK INPUTS</span>` }[s] || "");
+                          ERROR: `<span class="data-status DOES_NOT_MEET">CHECK INPUTS</span>`,
+                          NOT_DEFINED: `<span class="data-status DATA_INCOMPLETE">NOT DEFINED</span>` }[s] || "");
 
     function renderCalcs(r) {
         lastResult = r;
@@ -231,10 +228,10 @@
             if (values[i.symbol] !== undefined && values[i.symbol] !== "") known[i.symbol] = { value: Number(values[i.symbol]), unit: i.unit };
         });
         r.calculations.forEach(cr => (cr.steps || []).forEach(s => { known[s.symbol] = { value: s.result, unit: s.unit }; }));
-        // keep open "Show working" sections open when redrawing
-        const open = [...calcs.querySelectorAll("details.sz-details")].map(d => d.open);
+        // keep open "Show calculation details" sections open when redrawing
+        const open = [...calcs.querySelectorAll("details.calc-details")].map(d => d.open);
         calcs.innerHTML = plan.calculations.map((c, idx) => card(c, r.calculations[idx], idx + 1)).join("");
-        calcs.querySelectorAll("details.sz-details").forEach((d, i) => { if (open[i]) d.open = true; });
+        calcs.querySelectorAll("details.calc-details").forEach((d, i) => { if (open[i]) d.open = true; });
     }
 
     // Under each step: the values it used and its result in the engineer's units, with the exact factor
@@ -259,16 +256,29 @@
         return out.filter(Boolean);
     }
 
+    // Label naming the selected standard on every calculated step
+    const stepTag = c => {
+        const k = methodKind(c);
+        const what = c.kind === "motor_selection" ? "catalogue selection" : k === "physics" ? "basic physics" : k === "general" ? c.standard.replace(/^General engineering mechanics\s*—\s*/, "") : "";
+        return `<span class="tag tag-std">${esc(std() || c.standard || "")}${what && std() ? ` · ${esc(what)}` : ""}</span>`;
+    };
+    // Built-in text says "ISO 281"; under an equivalent selected standard (ABMA Std 9/11) name that one
+    const named = t => std() && !/^General/.test(std()) ? String(t).replace(/ISO 281/g, std()) : String(t);
+
     function card(c, r, n) {
         let bodyHtml = "";
-        if (r.status === "WAITING") {
+        if (r.status === "NOT_DEFINED") {
+            bodyHtml = `<div class="nd-note"><strong>Not defined in ${esc(std())}.</strong> ${esc(std())} has no method for this
+                step in the tool, so it is not calculated — values are never borrowed from another standard.</div>`;
+        } else if (r.status === "WAITING") {
             bodyHtml = `<div class="pj-wait"><span>Waiting for</span> ${r.waiting_for.map(x => `<span class="need-chip">${esc(x)}</span>`).join("")}</div>`;
         } else if (r.status === "ERROR") {
             bodyHtml = `<div class="sz-note danger"><ul>${r.errors.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>`;
         } else if (c.kind === "formula") {
             bodyHtml = `<div class="pj-results">${r.steps.map(s => `<div class="pj-res"><span>${esc(s.name)}</span><strong>${Units.valueHtml(s.result, s.unit)}</strong></div>`).join("")}</div>
-                <details class="sz-details"><summary>Show working <span class="u-note">(the formula uses the calculation's units so the arithmetic can be checked; your units are shown under each step)</span></summary><ol class="sz-steps">${r.steps.map((s, i) => `
-                    <li class="sz-stepline"><div class="sz-step-head"><span class="sz-step-n">${i + 1}</span> ${esc(s.name)}</div>
+                <details class="sz-details calc-details"><summary>Show calculation details</summary>
+                    <p class="u-note">Formulas use the calculation's units so the arithmetic can be checked; your units are shown under each step.</p><ol class="sz-steps">${r.steps.map((s, i) => `
+                    <li class="sz-stepline"><div class="sz-step-head"><span class="sz-step-n">${i + 1}</span> ${esc(s.name)} ${stepTag(c)}</div>
                     ${MathFmt.block(s.formula, "sz-formula")}${MathFmt.block(s.substitution, "sz-subst")}
                     ${inYourUnitsLine(s)}
                     ${s.note ? `<div class="sz-step-note">${esc(s.note)}</div>` : ""}</li>`).join("")}</ol>
@@ -294,16 +304,17 @@
                 row("Equivalent dynamic load P", Units.valueHtml(b.equivalent_load_n, "N")),
                 exp ? row("Life exponent p", esc(exp.substitution.replace(/^p\s*/, ""))) : "",
             ].join("");
-            bodyHtml = `<div class="pj-bearing">
-                <div><h4>Values used</h4><table class="rs-table">${usedRows}</table></div>
-                <div><h4>Results</h4><table class="rs-table">${resRows}</table>
+            bodyHtml = `<div class="pj-bearing one">
+                <div><table class="rs-table">${resRows}</table>
                     ${b.min_dynamic_rating_kn != null ? `<p class="pj-bearing-tip">Choose a bearing whose catalogue C is at least ${esc(plain(b.min_dynamic_rating_kn, "kN"))}.</p>` : ""}
                     ${b.status === "MEETS" ? `<p class="pj-bearing-tip">Expected life is at least the required ${esc(plain(u.required_life_h, "h"))}.</p>` : ""}
                     ${b.status === "DOES_NOT_MEET" ? `<p class="pj-bearing-tip bad">Expected life is below the required ${esc(plain(u.required_life_h, "h"))} — choose a bearing with a higher C.</p>` : ""}</div></div>
-                <details class="sz-details" open><summary>Working (${b.steps.length} steps)</summary><ol class="rs-steps">${b.steps.map((s, i) => `
-                    <li class="rs-step"><div class="rs-step-n">${i + 1}</div><div class="rs-step-body"><div class="rs-step-name">${esc(s.label)}</div>
+                <details class="sz-details calc-details"><summary>Show calculation details</summary>
+                    <h4 class="cd-head">Values used</h4><table class="rs-table">${usedRows}</table>
+                    <h4 class="cd-head">Working</h4><ol class="rs-steps">${b.steps.map((s, i) => `
+                    <li class="rs-step"><div class="rs-step-n">${i + 1}</div><div class="rs-step-body"><div class="rs-step-name">${esc(s.label)} ${stepTag(c)}</div>
                     ${MathFmt.block(s.formula, "rs-formula")}${MathFmt.block(s.substitution, "rs-subst")}</div></li>`).join("")}</ol>
-                    ${(b.notes || []).filter(x => !/^Choose a bearing/.test(x)).map(x => `<p class="field-hint" style="margin-top:0.5rem">${esc(x)}</p>`).join("")}</details>`;
+                    ${(b.notes || []).filter(x => !/^Choose a bearing/.test(x)).map(x => `<p class="field-hint" style="margin-top:0.5rem">${esc(named(x))}</p>`).join("")}</details>`;
         } else {
             const m = r.motors || [];
             const net = r.internet;
@@ -321,14 +332,15 @@
                 : `<div class="pj-wait">No motor + gearbox in the built-in list can deliver ${esc(plain(r.used.required_torque_nm, "N·m"))} × ${fmt(r.used.service_factor ?? 1)} (service factor) at ${esc(plain(r.used.required_speed_rpm, "rpm"))} on ${esc(plain(r.used.max_voltage_v, "V"))}.
                     Tick "Also search the internet" above, or use these requirements with a supplier.</div>${netHtml}`;
         }
-        // The customer's standard when it uses the same method (e.g. ABMA Std 11 = ISO 281), else a regional note
-        const eq = window.Standards && c.standard ? Standards.equivalentFor(c.standard, c.bearing_type) : null;
-        const stdLine = eq ? eq.note : (window.Standards && c.standard ? Standards.regionalFor(c.standard) : "");
+        // Ball/roller mismatch with the selected ABMA standard (Std 9 = ball, Std 11 = roller)
+        const eq = window.Standards && c.standard && r.status !== "NOT_DEFINED" ? Standards.equivalentFor(c.standard, c.bearing_type) : null;
+        const stdLine = eq && /Note:/.test(eq.note) ? eq.note.replace(/^.*?(Note:)/, "$1") : "";
+        const title = r.status === "NOT_DEFINED" ? c.title.replace(/\s*\([^)]*\)\s*$/, "") : named(c.title);   // no other standard named
         const noMatch = c.kind === "motor_selection" && r.status === "DONE" && !(r.motors || []).length;
         const tag = noMatch ? `<span class="data-status DATA_INCOMPLETE">NO MATCH IN LIST</span>` : badge(r.status);
         return `<div class="pj-card ${noMatch ? "waiting" : r.status.toLowerCase()}">
-            <div class="pj-card-head"><span class="pj-n">${n}</span><div><div class="pj-card-title">${esc(eq ? c.title.replace(/\(ISO 281\)/, `(${eq.name})`) : c.title)} ${tag}</div>
-                <div class="pj-card-meta">${esc(c.purpose)}${c.standard ? ` <span class="tag tag-std">${eq ? `${esc(eq.name)} — same method as ${esc(c.standard)}` : esc(c.standard)}</span>` : ""}${c.kind !== "formula" ? ` <span class="tag tag-ok">checked calculation</span>` : ""}</div>
+            <div class="pj-card-head"><span class="pj-n">${n}</span><div><div class="pj-card-title">${esc(title)} ${tag}</div>
+                <div class="pj-card-meta">${esc(c.purpose)} ${r.status === "NOT_DEFINED" ? "" : stepTag(c)}${c.kind !== "formula" && r.status !== "NOT_DEFINED" ? ` <span class="tag tag-ok">checked calculation</span>` : ""}</div>
                 ${c.note ? `<div class="field-hint">${esc(c.note)}</div>` : ""}
                 ${stdLine ? `<div class="std-note">${esc(stdLine)}</div>` : ""}</div></div>
             ${bodyHtml}</div>`;

@@ -204,5 +204,17 @@ IEC/EN 60204-1, ANSI B11, NFPA 79, OSHA, machinery regulations and directives, C
 AS 1755, EN 620, ASME B30) the tool itself adds the first limitation: the standard has no calculation method, the
 method used is NOT that standard, and the customer should say which design standard applies. Review this list.
 
+**One selected standard (engineer's rule).** A standard must be selected before anything is calculated
+(Continue / Calculate are blocked: "Select a standard to calculate. Results depend on the standard you choose.").
+"General engineering mechanics — no design standard" is an explicit choice, never pre-selected. Every result comes from
+the selected standard only (app/engine/standard_rules.py):
+- basic physics steps (statics, torque, power, belt friction, catalogue matching) run under every selection;
+- general design methods (built-in shaft sizing) run only under General engineering mechanics;
+- a standard's method runs only under that standard or a true equivalent (ISO 281 = ANSI/ABMA Std 9/11 = BS ISO 281);
+- anything else is "Not defined in <standard>" with no number; nothing is borrowed from another standard;
+- AI methods that cite any other standard are retried once, then refused; safety/procedure standards define no calculation;
+- changing the standard clears the result. Results show "Calculated using: <standard>"; steps fold under
+  "Show calculation details". Review: which steps count as basic physics, and the equivalence list.
+
 Planned next: a standards table the engineer fills in per part and country; built-in checks to specific standards
 (e.g. AS 1403, DIN 743 shafts) using factors from the engineer's copy.

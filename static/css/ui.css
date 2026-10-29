@@ -159,6 +159,35 @@
 .pj-name { font-weight: 600; }
 .pj-src { font-weight: 400; }
 
+/* ── One selected standard ── */
+.std-req { font-weight: 600; color: var(--red-500); }
+.std-required { font-size: 0.84rem; font-weight: 600; color: var(--amber-400); }
+.std-required.nudge { color: var(--red-500); }
+button.is-blocked, button.is-blocked:hover { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+.used-line { margin: 0 0 1rem; padding: 0.5rem 0.8rem; border-radius: var(--radius-sm); background: var(--primary-soft);
+             font-size: 0.86rem; color: var(--silver-200); }
+.used-line strong { color: var(--silver-100); }
+.used-line span { color: var(--silver-600); font-size: 0.8rem; }
+.as-head .used-line { margin: 0.7rem 0 0; }
+.calc-details { margin-top: 1rem; border: 1px solid var(--dark-600); border-radius: var(--radius-md); }
+.calc-details > summary { cursor: pointer; padding: 0.7rem 1rem; font-weight: 600; font-size: 0.9rem; color: var(--primary); margin: 0; }
+:root[data-theme="dark"] .calc-details > summary { color: var(--blue-400); }
+.calc-details[open] > summary { border-bottom: 1px solid var(--dark-600); }
+.calc-details > :not(summary) { margin-left: 1rem; margin-right: 1rem; }
+.calc-details > :last-child { margin-bottom: 1rem; }
+.calc-details .rs-section:first-child { margin-top: 1rem; }
+.pj-card .calc-details { margin-left: 2.35rem; }
+.cd-head { font-size: 0.78rem; font-weight: 700; color: var(--silver-600); text-transform: uppercase; letter-spacing: 0.05em; margin: 0.9rem 1rem 0.3rem; }
+.step-std { margin-left: 0.4rem; font-size: 0.68rem; padding: 0.1rem 0.45rem; vertical-align: middle; }
+.nd-note { margin: 0.6rem 0 0 2.35rem; padding: 0.55rem 0.8rem; border-left: 3px solid var(--silver-600); border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+           background: var(--dark-700); font-size: 0.84rem; color: var(--silver-400); }
+.nd-note strong { color: var(--silver-100); }
+.pj-card.not_defined { background: var(--dark-700); }
+.pill-nd { display: inline-block; font-size: 0.74rem; color: var(--silver-600); border: 1px solid var(--dark-500); border-radius: 999px; padding: 0.12rem 0.55rem; }
+.pj-bearing.one { grid-template-columns: 1fr; max-width: 34rem; }
+@media (max-width: 720px) { .pj-card .calc-details, .nd-note { margin-left: 0; } }
+@media print { .calc-details > :not(summary) { display: block !important; } .calc-details > summary { display: none; } }
+
 /* Bearing card on project plans: values used | results side by side */
 .pj-bearing { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem 1.5rem; margin: 0.75rem 0 0 2.35rem; }
 .pj-bearing h4 { font-size: 0.78rem; font-weight: 700; color: var(--silver-600); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.3rem; }

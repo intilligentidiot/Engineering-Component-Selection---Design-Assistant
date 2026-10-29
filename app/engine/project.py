@@ -24,6 +24,7 @@ from app.engine.method_eval import (
     PlanStep, EvaluatedStep, PlanError, CONSTS, FUNCS, _SYMBOL, _parse, _check, _names, _eval, _Sub, _fmt, _MAX_ABS,
 )
 from app.engine.bearing import bearing_life, BearingRequest
+from app.engine.standard_rules import allowed
 import ast
 
 KINDS = ("formula", "bearing_life", "motor_selection")
@@ -108,7 +109,7 @@ class ProjectPlan(BaseModel):
 
 class CalcResult(BaseModel):
     id: str
-    status: str            # DONE | WAITING | ERROR
+    status: str            # DONE | WAITING | ERROR | NOT_DEFINED (method from another standard)
     waiting_for: List[str] = []
     errors: List[str] = []
     steps: List[EvaluatedStep] = []
@@ -272,7 +273,10 @@ def map_requested(plan: ProjectPlan, items: List[str]) -> ProjectPlan:
 # Evaluation
 # ─────────────────────────────────────────────────────────────
 
-def evaluate_project(plan: ProjectPlan, values: Dict[str, Any], db=None, include_internet: bool = False) -> ProjectResult:
+def evaluate_project(plan: ProjectPlan, values: Dict[str, Any], db=None, include_internet: bool = False,
+                     standard: str = "") -> ProjectResult:
+    """`standard`: the engineer's selected standard. When given, a calculation whose method comes from a
+    different standard is not run ("Not defined in <standard>"); basic physics always runs."""
     problems = validate_project(plan)
     if problems:
         return ProjectResult(status="INVALID_PLAN", errors=problems)
@@ -291,6 +295,11 @@ def evaluate_project(plan: ProjectPlan, values: Dict[str, Any], db=None, include
 
     results: List[CalcResult] = []
     for c in plan.calculations:
+        if standard and not allowed(c.standard, standard):
+            results.append(CalcResult(id=c.id, status="NOT_DEFINED",
+                                      errors=[f"Not defined in {standard}. {standard} has no method for this step in the tool, so it "
+                                              f"is not calculated — nothing is taken from another standard."]))
+            continue
         if c.kind == "formula":
             results.append(_run_formula(c, env, names))
             for s in c.steps:
@@ -457,7 +466,7 @@ def shredder_template(machine: str = "Shredding machine") -> ProjectPlan:
                         links=[Link(param="required_speed_rpm", symbol="n"), Link(param="required_torque_nm", symbol="T_tot"),
                                Link(param="service_factor", symbol="SF"), Link(param="max_voltage_v", symbol="V")]),
             ProjectCalc(id="shaft", title="Cutter shaft diameter", purpose="Minimum shaft size for combined torsion and bending.",
-                        standard="Combined torsion + bending, maximum-shear-stress theory (ASME shaft-design approach)",
+                        standard="General engineering mechanics — combined torsion + bending, maximum-shear-stress theory",
                         steps=[S("M", "Bending moment (cutting force at mid-span)", "N·m", "F * L / 4 / 1000",
                                  "Simply supported shaft, force at mid-span (conservative)."),
                                S("d", "Minimum shaft diameter", "mm",
