@@ -169,7 +169,8 @@ def test_safety_standard_gets_a_tool_written_warning_even_if_the_ai_forgets(monk
     plan = _shaft_plan(inputs=[
         PlanInput(symbol="T", name="Torque", unit="N·m", value=50, quote="50 Nm"),
         PlanInput(symbol="tau_allow", name="Allowable shear stress", unit="MPa", typical_value=40)])
-    plan.limitations = ["Static loading only."]
+    plan.limitations = ["Static loading only.",
+                        "AS 4024.1 is a safety standard and does not provide calculation methods for shafts."]
     routing = MagicMock(); routing.parsed = MagicMock(topic="general", reason="Shaft sizing.")
     planned = MagicMock(); planned.parsed = plan
     with patch("app.ai.gemini_parser.genai") as genai:
@@ -177,6 +178,7 @@ def test_safety_standard_gets_a_tool_written_warning_even_if_the_ai_forgets(monk
         r = ask("shaft diameter for 50 Nm torque", country="Australia", standard="AS 4024.1")
     assert r.plan.limitations[0].startswith("AS 4024.1 is a safety")
     assert "NOT AS 4024.1" in r.plan.limitations[0]
+    assert r.plan.limitations[1:] == ["Static loading only."]   # the AI's own copy of the warning is dropped
     assistant._CACHE.clear()
 
 
@@ -186,3 +188,20 @@ def test_which_standards_have_no_calculation_method():
         assert standard_gap_note(s), s
     for s in ["AS 1403", "DIN 743", "ISO 281", "AS 4100", "ANSI/AGMA 2001", "BS EN 13001", ""]:
         assert not standard_gap_note(s), s
+
+
+
+def test_what_the_standard_covers_is_told_to_the_ai():
+    from app.ai.assistant import standards_context
+    text = standards_context("Australia", "AS 1403", "Design of rotating steel shafts")
+    assert "AS 1403 (what it covers: Design of rotating steel shafts)" in text
+    assert "do not guess" in text
+    assert "what it covers" not in standards_context("Australia", "Company spec 12", "")
+
+
+def test_ask_endpoint_passes_the_standard_scope():
+    with patch("app.ai.assistant.ask") as fake:
+        fake.return_value.model_dump.return_value = {}
+        client.post("/api/ask", json={"text": "shaft", "country": "Australia", "standard": "AS 1403",
+                                      "standard_scope": "Design of rotating steel shafts"})
+    fake.assert_called_once_with("shaft", "Australia", "AS 1403", "Design of rotating steel shafts")

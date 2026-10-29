@@ -91,6 +91,7 @@ class AskRequest(BaseModel):
     text: str
     country: str = ""       # project country chosen by the engineer
     standard: str = ""      # customer's required standard
+    standard_scope: str = ""  # what that standard covers, from the tool's list
 
 
 @router.post("/ask")
@@ -101,7 +102,7 @@ def ask_question(request: AskRequest):
     the values the user wrote. Never returns calculated results.
     """
     from app.ai.assistant import ask
-    return ask(request.text, request.country, request.standard).model_dump()
+    return ask(request.text, request.country, request.standard, request.standard_scope).model_dump()
 
 
 class EvaluateMethodRequest(BaseModel):

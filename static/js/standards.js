@@ -213,6 +213,11 @@
         return `<div class="std-note">${follows} ${regional ? esc(regional) + " " : ""}${confirm}</div>`;
     }
 
+    // What a listed standard covers ("" for a typed one) — told to the AI so it does not guess
+    function scopeOf(country, code) {
+        return (STANDARDS[country] || []).find(([c]) => c === code)?.[1] || "";
+    }
+
     function summaryText() {
         const { country, customer } = get();
         return [country && `Country: ${country}`, customer && `Customer standard: ${customer}`].filter(Boolean).join(" · ");
@@ -272,5 +277,5 @@
     }
 
     document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", init) : init();
-    window.Standards = { get, noteFor, summaryText, suggest, COUNTRIES, STANDARDS };
+    window.Standards = { get, noteFor, summaryText, suggest, scopeOf, COUNTRIES, STANDARDS };
 })();

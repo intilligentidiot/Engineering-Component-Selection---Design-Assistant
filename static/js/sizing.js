@@ -285,7 +285,8 @@
         try {
             // One entry point decides the kind of calculation; only motor sizing is handled here
             const std = window.Standards ? Standards.get() : { country: "", customer: "" };
-            const asked = await post("/api/ask", { text, country: std.country, standard: std.customer });
+            const asked = await post("/api/ask", { text, country: std.country, standard: std.customer,
+                                                   standard_scope: window.Standards ? Standards.scopeOf(std.country, std.customer) : "" });
             if (asked.topic !== "motor_sizing") {
                 setMode("start"); aiFeedback.hidden = true;
                 proofPanel.hidden = true; resultsPanel.hidden = true; errorPanel.hidden = true;

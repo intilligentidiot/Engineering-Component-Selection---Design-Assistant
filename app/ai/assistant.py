@@ -303,8 +303,8 @@ METHOD_INSTRUCTION = (
 )
 
 
-def plan_method(text: str, country: str = "", standard: str = "") -> MethodPlan:
-    plan = call_structured(MethodPlan, METHOD_INSTRUCTION + standards_context(country, standard), text)
+def plan_method(text: str, country: str = "", standard: str = "", scope: str = "") -> MethodPlan:
+    plan = call_structured(MethodPlan, METHOD_INSTRUCTION + standards_context(country, standard, scope), text)
     norm_text = _norm(text)
     for i in plan.inputs:   # a value counts as "given" only if the user's words are really in the text
         if i.value is not None and not (i.quote and _norm(i.quote) in norm_text and re.search(r"\d", i.quote)):
@@ -349,18 +349,22 @@ def standard_gap_note(standard: Optional[str]) -> str:
 def _add_gap_note(plan, standard: Optional[str]) -> None:
     note = standard_gap_note(standard)
     if note and note not in plan.limitations:
-        plan.limitations.insert(0, note)
+        name = _clean(standard).lower()
+        plan.limitations = [note] + [l for l in plan.limitations if not (
+            name in l.lower() and re.search(r"safety|legal|procedur|does not (?:provide|cover)|no calculation", l, re.I))]
 
 
-def standards_context(country: Optional[str], standard: Optional[str]) -> str:
+def standards_context(country: Optional[str], standard: Optional[str], scope: Optional[str] = "") -> str:
     """Extra planning rules when the engineer chose a project country and/or the customer's standard.
     The AI writes formulas only; factors from a paid standard's tables become inputs the engineer enters."""
-    country, standard = _clean(country), _clean(standard)
+    country, standard, scope = _clean(country), _clean(standard), _clean(scope)
     if not country and not standard:
         return ""
     where = f" The machine is for {country}." if country else ""
     if standard:
-        return (f" PROJECT STANDARD:{where} The customer requires {standard}. "
+        return (f" PROJECT STANDARD:{where} The customer requires {standard}"
+                + (f" (what it covers: {scope}). Rely on this description; do not guess what {standard} is about. "
+                   if scope else ". ") +
                 f"a) Use {standard}'s calculation method for every calculation it covers and write '{standard}' "
                 f"(with the clause if you know it) in that calculation's standard field; for calculations it does not "
                 f"cover, use another recognised method and name it. "
@@ -529,8 +533,8 @@ def requested_items(text: str) -> List[str]:
     return items
 
 
-def plan_project(text: str, country: str = "", standard: str = "") -> ProjectPlan:
-    plan = _plan_project(text, standards_context(country, standard))
+def plan_project(text: str, country: str = "", standard: str = "", scope: str = "") -> ProjectPlan:
+    plan = _plan_project(text, standards_context(country, standard, scope))
     if not plan.requested:
         items = requested_items(text)
         if items:
@@ -576,13 +580,13 @@ AI_OFF_MESSAGE = ("This question needs the AI to choose a calculation method, an
                   "If you already know the torque and speed, use the 'Advanced: Torque & RPM' tab.")
 
 
-def ask(text: str, country: str = "", standard: str = "") -> AskResult:
+def ask(text: str, country: str = "", standard: str = "", scope: str = "") -> AskResult:
     provider = _provider()
     r = route(text)
     res = AskResult(topic=r.topic, reason=r.reason, provider=provider)
     try:
         if r.topic == "project":
-            project = plan_project(text, country, standard)
+            project = plan_project(text, country, standard, scope)
             problems = repair_project(project)
             if problems:
                 res.status, res.message = "INVALID_PLAN", ("The AI's project plan could not be checked, so it was not used: "
@@ -594,7 +598,7 @@ def ask(text: str, country: str = "", standard: str = "") -> AskResult:
         elif r.topic == "bearing_life":
             res.bearing_values = extract_bearing(text)
         else:
-            plan = plan_method(text, country, standard)
+            plan = plan_method(text, country, standard, scope)
             problems = validate_plan(plan)
             if problems:
                 res.status, res.message = "INVALID_PLAN", ("The AI's method could not be checked, so it was not used: "
