@@ -213,6 +213,20 @@
         return `<div class="std-note">${follows} ${regional ? esc(regional) + " " : ""}${confirm}</div>`;
     }
 
+    // The customer's standard uses the same method as this check (ABMA Std 9 / 11 = ISO 281 basic rating life)
+    function equivalentFor(standard, bearingType) {
+        const cust = get().customer;
+        if (!cust || !/ISO 281/i.test(standard || "")) return null;
+        if (/ISO 281/i.test(cust)) return { name: cust, note: "" };
+        const m = cust.match(/ABMA\s*Std\s*(9|11)\b/i);
+        if (!m) return null;
+        const wrong = (m[1] === "9" && bearingType === "roller") || (m[1] === "11" && bearingType === "ball");
+        const right = bearingType === "roller" ? "ANSI/ABMA Std 11 (roller bearings)" : "ANSI/ABMA Std 9 (ball bearings)";
+        return { name: cust,
+                 note: `${cust} uses the same basic rating-life method as ISO 281, so this result applies to it.` +
+                       (wrong ? ` Note: ${cust} covers ${m[1] === "9" ? "ball" : "roller"} bearings — this is a ${bearingType} bearing, so ${right} is the one that applies.` : "") };
+    }
+
     // A note when the project's country usually uses a different standard for this check
     function regionalFor(standard) {
         const country = get().country;
@@ -283,5 +297,5 @@
     }
 
     document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", init) : init();
-    window.Standards = { get, noteFor, regionalFor, summaryText, suggest, scopeOf, COUNTRIES, STANDARDS };
+    window.Standards = { get, noteFor, regionalFor, equivalentFor, summaryText, suggest, scopeOf, COUNTRIES, STANDARDS };
 })();

@@ -301,13 +301,16 @@
                 : `<div class="pj-wait">No motor + gearbox in the built-in list can deliver ${esc(plain(r.used.required_torque_nm, "N·m"))} × ${fmt(r.used.service_factor ?? 1)} (service factor) at ${esc(plain(r.used.required_speed_rpm, "rpm"))} on ${esc(plain(r.used.max_voltage_v, "V"))}.
                     Tick "Also search the internet" above, or use these requirements with a supplier.</div>${netHtml}`;
         }
+        // The customer's standard when it uses the same method (e.g. ABMA Std 11 = ISO 281), else a regional note
+        const eq = window.Standards && c.standard ? Standards.equivalentFor(c.standard, c.bearing_type) : null;
+        const stdLine = eq ? eq.note : (window.Standards && c.standard ? Standards.regionalFor(c.standard) : "");
         const noMatch = c.kind === "motor_selection" && r.status === "DONE" && !(r.motors || []).length;
         const tag = noMatch ? `<span class="data-status DATA_INCOMPLETE">NO MATCH IN LIST</span>` : badge(r.status);
         return `<div class="pj-card ${noMatch ? "waiting" : r.status.toLowerCase()}">
             <div class="pj-card-head"><span class="pj-n">${n}</span><div><div class="pj-card-title">${esc(c.title)} ${tag}</div>
-                <div class="pj-card-meta">${esc(c.purpose)}${c.standard ? ` <span class="tag tag-std">${esc(c.standard)}</span>` : ""}${c.kind !== "formula" ? ` <span class="tag tag-ok">checked calculation</span>` : ""}</div>
+                <div class="pj-card-meta">${esc(c.purpose)}${c.standard ? ` <span class="tag tag-std">${esc(c.standard)}${eq ? ` = ${esc(eq.name)}` : ""}</span>` : ""}${c.kind !== "formula" ? ` <span class="tag tag-ok">checked calculation</span>` : ""}</div>
                 ${c.note ? `<div class="field-hint">${esc(c.note)}</div>` : ""}
-                ${window.Standards && c.standard && Standards.regionalFor(c.standard) ? `<div class="std-note">${esc(Standards.regionalFor(c.standard))}</div>` : ""}</div></div>
+                ${stdLine ? `<div class="std-note">${esc(stdLine)}</div>` : ""}</div></div>
             ${bodyHtml}</div>`;
     }
 

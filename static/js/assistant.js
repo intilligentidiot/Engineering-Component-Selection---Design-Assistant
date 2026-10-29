@@ -275,7 +275,8 @@
                 ${r.min_dynamic_rating_kn != null ? card("Minimum rating C", r.min_dynamic_rating_kn, "kN", "choose a bearing with at least this C", "main") : ""}
                 ${card("Equivalent load P", r.equivalent_load_n, "N")}
             </div>
-            ${stdNote("ISO 281", false)}
+            ${(() => { const eq = window.Standards?.equivalentFor("ISO 281", values.bearing_type);
+                       return eq?.note ? `<div class="std-note">${esc(eq.note)}</div>` : stdNote("ISO 281", false); })()}
             ${section("Calculation", stepsHtml(r.steps), `${r.steps.length} steps`)}
             ${fold("Notes", r.notes || [])}`;
         panel.hidden = false;
