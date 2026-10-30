@@ -50,6 +50,14 @@
 
     window.MathFmt = { html, block, name };
 
+    // Signed out (company login): go to the sign-in page instead of showing an error
+    const fetch0 = window.fetch.bind(window);
+    window.fetch = async (...args) => {
+        const r = await fetch0(...args);
+        if (r.status === 401 && String(args[0]).includes("/api/")) window.location.href = "/login";
+        return r;
+    };
+
     // "Show calculation details" / "Hide calculation details" — opens and closes without recalculating
     document.addEventListener("toggle", e => {
         const d = e.target;

@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Sign in — Engineering Calculation Assistant</title>
+    <link rel="icon" type="image/svg+xml" href="/static/img/favicon.svg">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css?v=9.7">
+    <link rel="stylesheet" href="/static/css/theme.css?v=1.7">
+    <link rel="stylesheet" href="/static/css/ui.css?v=1.5">
+    <script>
+        (function () {
+            var t = null;
+            try { t = localStorage.getItem("tmd.theme"); } catch (e) {}
+            document.documentElement.setAttribute("data-theme", t === "dark" ? "dark" : "light");
+        })();
+    </script>
+</head>
+<body>
+    <header class="site-header">
+        <div class="header-inner">
+            <div class="logo">
+                <img class="logo-img" src="/static/img/tmd-logo-light.png" width="512" height="207" alt="Tesla Mechanical Designs">
+                <span class="logo-divider" aria-hidden="true"></span>
+                <span class="logo-secondary">Engineering<br>Calculation Assistant</span>
+            </div>
+        </div>
+    </header>
+    <main class="main-content login-main">
+        <section class="panel login-panel">
+            <h1>Sign in</h1>
+            <p class="field-hint">For Tesla Mechanical Designs engineers. Ask your manager for the company password.</p>
+            <form method="post" action="/login" class="login-form">
+                <label for="password">Company password</label>
+                <div class="input-row"><input type="password" id="password" name="password" autocomplete="current-password" required autofocus></div>
+                {% if error %}<p class="login-error" role="alert">{{ error }}</p>{% endif %}
+                <button type="submit" class="btn-primary">Sign in</button>
+            </form>
+        </section>
+    </main>
+</body>
+</html>

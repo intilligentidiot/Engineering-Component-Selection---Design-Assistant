@@ -19,6 +19,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.requests import Request
 from app.api.routes import router as api_router
 from app.database.database import engine, Base
+from app import auth
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -31,14 +32,19 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # Templates
 templates = Jinja2Templates(directory="templates")
 
+# Company login (off until APP_PASSWORD is set)
+app.middleware("http")(auth.middleware)
+app.include_router(auth.router)
+
 # Include API routes
 app.include_router(api_router, prefix="/api")
 
 @app.get("/")
 def read_root(request: Request):
     return templates.TemplateResponse(
-        request=request, 
-        name="index.html"
+        request=request,
+        name="index.html",
+        context={"signed_in": auth.enabled()},
     )
 
 @app.get("/health")
