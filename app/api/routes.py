@@ -120,12 +120,14 @@ class EvaluateProjectRequest(BaseModel):
     values: dict = {}
     include_internet: bool = False
     standard: str = ""      # the engineer's selected standard; steps from other standards are not run
+    step_standards: dict = {}   # calculation id -> a standard the engineer chose for that one step
 
 
 @router.post("/project-evaluate")
 def evaluate_project_route(request: EvaluateProjectRequest, db: Session = Depends(get_db)):
     """Runs every calculation of a project plan in order; missing information is reported per step."""
-    return evaluate_project(request.plan, request.values, db, request.include_internet, request.standard).model_dump()
+    return evaluate_project(request.plan, request.values, db, request.include_internet, request.standard,
+                            {str(k): str(v) for k, v in request.step_standards.items()}).model_dump()
 
 @router.post("/bearing-life")
 def bearing_life_check(request: BearingRequest):

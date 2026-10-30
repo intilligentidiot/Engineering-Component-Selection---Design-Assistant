@@ -85,6 +85,26 @@ def allowed(method_standard: Optional[str], selected: str) -> bool:
     return any(same_standard(c, selected) for c in codes)
 
 
+_FAMILY_NAMES = {"iso281": ["ISO 281", "ANSI/ABMA Std 9", "ANSI/ABMA Std 11", "BS ISO 281"]}
+
+
+def options_for(method_standard: Optional[str]) -> List[str]:
+    """Standards the engineer can select for a step so that the tool's method for it is that standard."""
+    k = kind(method_standard)
+    if k == "physics":
+        return []
+    if k == "general":
+        return [GENERAL]
+    out: List[str] = []
+    for code in CODE_RE.findall(method_standard or "") or [method_standard]:
+        code = code.strip()
+        fam = _FAMILY_NAMES.get(_main_code(code))
+        for name in fam or [code]:
+            if name not in out:
+                out.append(name)
+    return out
+
+
 def foreign_codes(text: str, selected: str) -> List[str]:
     """Standard codes cited in `text` that are not the selected standard."""
     out = []

@@ -123,3 +123,34 @@ def test_bearing_life_is_not_defined_under_a_non_bearing_standard(monkeypatch):
         gen.side_effect = [_reply(MagicMock(topic="bearing_life", reason="Bearing."))]
         r = ask("ball bearing 2000 N at 1500 rpm", standard="AS 1403")
     assert r.status == "NOT_DEFINED" and gen.call_count == 1
+
+
+def test_each_step_can_have_its_own_standard():
+    plan = shredder_template()
+    r = evaluate_project(plan, _shredder_values(), standard="ANSI/ABMA Std 11",
+                         step_standards={"shaft": GENERAL})
+    by_id = {c.id: res for c, res in zip(plan.calculations, r.calculations)}
+    assert by_id["shaft"].status == "DONE" and by_id["shaft"].standard == GENERAL
+    assert by_id["bearing_life"].status == "DONE" and by_id["bearing_life"].standard == "ANSI/ABMA Std 11"
+    assert by_id["cutting_force"].standard == "ANSI/ABMA Std 11"
+
+
+def test_not_defined_step_lists_only_standards_that_define_it():
+    plan = shredder_template()
+    r = evaluate_project(plan, _shredder_values(), standard="AS 1403")
+    by_id = {c.id: res for c, res in zip(plan.calculations, r.calculations)}
+    assert by_id["shaft"].options == [GENERAL]
+    assert by_id["bearing_life"].options == ["ISO 281", "ANSI/ABMA Std 9", "ANSI/ABMA Std 11", "BS ISO 281"]
+    # a step standard that does not define the step is still refused
+    r = evaluate_project(plan, _shredder_values(), standard="AS 1403", step_standards={"shaft": "DIN 743"})
+    assert {c.id: res.status for c, res in zip(plan.calculations, r.calculations)}["shaft"] == "NOT_DEFINED"
+
+
+def test_step_standards_reach_the_api():
+    from fastapi.testclient import TestClient
+    from app.main import app
+    plan = shredder_template()
+    body = {"plan": plan.model_dump(), "values": _shredder_values(), "standard": "ANSI/ABMA Std 11",
+            "step_standards": {"shaft": GENERAL}}
+    calcs = TestClient(app).post("/api/project-evaluate", json=body).json()["calculations"]
+    assert {c["id"]: c["status"] for c in calcs}["shaft"] == "DONE"

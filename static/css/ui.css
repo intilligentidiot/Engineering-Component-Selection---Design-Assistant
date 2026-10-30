@@ -183,6 +183,11 @@ button.is-blocked, button.is-blocked:hover { opacity: 0.5; cursor: not-allowed; 
            background: var(--dark-700); font-size: 0.84rem; color: var(--silver-400); }
 .nd-note strong { color: var(--silver-100); }
 .pj-card.not_defined { background: var(--dark-700); }
+.nd-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: 0.6rem; font-weight: 600; color: var(--silver-100); }
+.nd-pick select { background: var(--dark-800); color: var(--silver-100); border: 1px solid var(--primary); border-radius: var(--radius-sm);
+                  padding: 0.4rem 0.6rem; font-family: var(--font); font-size: 0.86rem; max-width: 100%; }
+.nd-hint { display: block; margin-top: 0.3rem; font-size: 0.76rem; color: var(--silver-600); }
+.step-reset { font-size: 0.76rem; padding: 0 0.2rem; }
 .pill-nd { display: inline-block; font-size: 0.74rem; color: var(--silver-600); border: 1px solid var(--dark-500); border-radius: 999px; padding: 0.12rem 0.55rem; }
 .pj-bearing.one { grid-template-columns: 1fr; max-width: 34rem; }
 @media (max-width: 720px) { .pj-card .calc-details, .nd-note { margin-left: 0; } }

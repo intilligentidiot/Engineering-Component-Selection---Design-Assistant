@@ -215,8 +215,7 @@
     }
 
     // The customer's standard uses the same method as this check (ABMA Std 9 / 11 = ISO 281 basic rating life)
-    function equivalentFor(standard, bearingType) {
-        const cust = get().customer;
+    function equivalentFor(standard, bearingType, cust = get().customer) {
         if (!cust || !/ISO 281/i.test(standard || "")) return null;
         if (/ISO 281/i.test(cust)) return { name: cust, note: "" };
         const m = cust.match(/ABMA\s*Std\s*(9|11)\b/i);

@@ -24,7 +24,7 @@ from app.engine.method_eval import (
     PlanStep, EvaluatedStep, PlanError, CONSTS, FUNCS, _SYMBOL, _parse, _check, _names, _eval, _Sub, _fmt, _MAX_ABS,
 )
 from app.engine.bearing import bearing_life, BearingRequest
-from app.engine.standard_rules import allowed
+from app.engine.standard_rules import allowed, options_for
 import ast
 
 KINDS = ("formula", "bearing_life", "motor_selection")
@@ -118,6 +118,8 @@ class CalcResult(BaseModel):
     internet: Optional[List[Dict[str, Any]]] = None      # Source B products (when requested)
     internet_source: Optional[str] = None                # LIVE | MOCK | UNAVAILABLE
     used: Dict[str, float] = {}
+    standard: str = ""     # the standard this step was calculated under (its own choice, or the project's)
+    options: List[str] = []  # NOT_DEFINED: standards the engineer can choose so the tool's method applies
 
 
 class ProjectResult(BaseModel):
@@ -274,9 +276,11 @@ def map_requested(plan: ProjectPlan, items: List[str]) -> ProjectPlan:
 # ─────────────────────────────────────────────────────────────
 
 def evaluate_project(plan: ProjectPlan, values: Dict[str, Any], db=None, include_internet: bool = False,
-                     standard: str = "") -> ProjectResult:
-    """`standard`: the engineer's selected standard. When given, a calculation whose method comes from a
-    different standard is not run ("Not defined in <standard>"); basic physics always runs."""
+                     standard: str = "", step_standards: Optional[Dict[str, str]] = None) -> ProjectResult:
+    """`standard`: the engineer's selected standard for the project; `step_standards`: a standard the engineer
+    chose for one calculation (by id). A calculation whose method is not its selected standard is not run
+    ("Not defined in <standard>"); basic physics always runs. Nothing is borrowed from another standard."""
+    step_standards = step_standards or {}
     problems = validate_project(plan)
     if problems:
         return ProjectResult(status="INVALID_PLAN", errors=problems)
@@ -295,17 +299,20 @@ def evaluate_project(plan: ProjectPlan, values: Dict[str, Any], db=None, include
 
     results: List[CalcResult] = []
     for c in plan.calculations:
-        if standard and not allowed(c.standard, standard):
-            results.append(CalcResult(id=c.id, status="NOT_DEFINED",
-                                      errors=[f"Not defined in {standard}. {standard} has no method for this step in the tool, so it "
+        sel = (step_standards.get(c.id) or standard or "").strip()
+        if sel and not allowed(c.standard, sel):
+            results.append(CalcResult(id=c.id, status="NOT_DEFINED", standard=sel, options=options_for(c.standard),
+                                      errors=[f"Not defined in {sel}. {sel} has no method for this step in the tool, so it "
                                               f"is not calculated — nothing is taken from another standard."]))
             continue
         if c.kind == "formula":
-            results.append(_run_formula(c, env, names))
+            res = _run_formula(c, env, names)
             for s in c.steps:
                 names.setdefault(s.symbol, f"{s.name} (from '{c.title}')")
         else:
-            results.append(_run_module(c, env, names, db, include_internet))
+            res = _run_module(c, env, names, db, include_internet)
+        res.standard = sel
+        results.append(res)
     return ProjectResult(status="EVALUATED", calculations=results, missing_inputs=missing_inputs)
 
 

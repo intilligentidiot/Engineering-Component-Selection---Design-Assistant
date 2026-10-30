@@ -18,7 +18,8 @@
     let plan = null, values = {}, quotes = {}, typical = {}, estimated = {};
     let lastResult = null, known = {};   // known: symbol -> { value, unit } for every input and result   // estimated: symbol -> how it was estimated
 
-    function hide() { area.hidden = true; plan = null; values = {}; quotes = {}; typical = {}; estimated = {}; }
+    let stepStd = {};   // calculation id -> a standard the engineer chose for that one step
+    function hide() { area.hidden = true; plan = null; values = {}; quotes = {}; typical = {}; estimated = {}; stepStd = {}; }
 
     async function show(data) {
         hide();
@@ -35,7 +36,7 @@
             <p class="as-head-sum">${esc(plan.summary)}</p>
             <p class="as-head-note">${ai ? "The AI chose the methods; the tool does every calculation and shows each step."
                 : "Motor + gearbox selection and bearing life use the tool's checked calculations."}</p>
-            ${std() ? Standards.usedLine("every step below names it; basic physics steps hold under any standard") : ""}</div>`;
+            <div id="pj-used"></div></div>`;
         renderInfo();
         $("pj-limits").innerHTML = (plan.limitations || []).length
             ? `<details class="rs-fold"><summary>Limitations of this plan <span>(${plan.limitations.length})</span></summary><ul>${plan.limitations.map(x => `<li>${esc(x)}</li>`).join("")}</ul></details>` : "";
@@ -162,7 +163,7 @@
         let r;
         const sentStd = std();
         try {
-            const res = await fetch(`${API}/api/project-evaluate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ plan, values: vals, include_internet: $("pj-internet").checked, standard: std() }) });
+            const res = await fetch(`${API}/api/project-evaluate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ plan, values: vals, include_internet: $("pj-internet").checked, standard: std(), step_standards: stepStd }) });
             r = await res.json();
             if (!res.ok) throw new Error(typeof r.detail === "string" ? r.detail : "The plan could not be calculated.");
         } catch (err) {
@@ -175,6 +176,17 @@
         const done = r.calculations.filter(c => c.status === "DONE").length;
         progress.textContent = `${done} of ${r.calculations.length} calculations done`;
         renderCalcs(r);
+        renderUsed(r);
+    }
+
+    // "Calculated using": every standard in this result and the steps it covers
+    function renderUsed(r) {
+        const by = {};
+        r.calculations.forEach((cr, i) => { if (cr.status !== "NOT_DEFINED" && cr.standard) (by[cr.standard] = by[cr.standard] || []).push(i + 1); });
+        const names = Object.keys(by);
+        $("pj-used").innerHTML = !names.length ? "" : `<div class="used-line">Calculated using: ${names.map(s => names.length > 1
+            ? `<strong>${esc(s)}</strong> <span>(step${by[s].length > 1 ? "s" : ""} ${by[s].join(", ")})</span>` : `<strong>${esc(s)}</strong>`).join(" · ")}
+            ${names.length === 1 ? `<span>· every step below names it; basic physics steps hold under any standard</span>` : ""}</div>`;
     }
 
     // "You asked for": each result the user listed, with its answer or what it is waiting for
@@ -257,19 +269,24 @@
     }
 
     // Label naming the selected standard on every calculated step
-    const stepTag = c => {
+    const stepTag = (c, cs) => {
         const k = methodKind(c);
         const what = c.kind === "motor_selection" ? "catalogue selection" : k === "physics" ? "basic physics" : k === "general" ? c.standard.replace(/^General engineering mechanics\s*—\s*/, "") : "";
-        return `<span class="tag tag-std">${esc(std() || c.standard || "")}${what && std() ? ` · ${esc(what)}` : ""}</span>`;
+        return `<span class="tag tag-std">${esc(cs || c.standard || "")}${what && cs ? ` · ${esc(what)}` : ""}</span>`;
     };
     // Built-in text says "ISO 281"; under an equivalent selected standard (ABMA Std 9/11) name that one
-    const named = t => std() && !/^General/.test(std()) ? String(t).replace(/ISO 281/g, std()) : String(t);
+    const named = (t, cs) => cs && !/^General/.test(cs) ? String(t).replace(/ISO 281/g, cs) : String(t);
 
     function card(c, r, n) {
         let bodyHtml = "";
+        const cs = r.standard || std();   // this step's standard: its own choice, or the project's
         if (r.status === "NOT_DEFINED") {
-            bodyHtml = `<div class="nd-note"><strong>Not defined in ${esc(std())}.</strong> ${esc(std())} has no method for this
-                step in the tool, so it is not calculated — values are never borrowed from another standard.</div>`;
+            bodyHtml = `<div class="nd-note"><strong>Not defined in ${esc(cs)}.</strong> ${esc(cs)} has no method for this
+                step in the tool, so it is not calculated — values are never borrowed from another standard.
+                ${(r.options || []).length ? `<label class="nd-pick">Choose a standard for this step
+                    <select data-step-std="${esc(c.id)}"><option value="" selected disabled>Select a standard…</option>${
+                        r.options.map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join("")}</select></label>
+                    <span class="nd-hint">Only standards the tool has a method for are listed. This step will use that standard only.</span>` : ""}</div>`;
         } else if (r.status === "WAITING") {
             bodyHtml = `<div class="pj-wait"><span>Waiting for</span> ${r.waiting_for.map(x => `<span class="need-chip">${esc(x)}</span>`).join("")}</div>`;
         } else if (r.status === "ERROR") {
@@ -278,7 +295,7 @@
             bodyHtml = `<div class="pj-results">${r.steps.map(s => `<div class="pj-res"><span>${esc(s.name)}</span><strong>${Units.valueHtml(s.result, s.unit)}</strong></div>`).join("")}</div>
                 <details class="sz-details calc-details"><summary>Show calculation details</summary>
                     <p class="u-note">Formulas use the calculation's units so the arithmetic can be checked; your units are shown under each step.</p><ol class="sz-steps">${r.steps.map((s, i) => `
-                    <li class="sz-stepline"><div class="sz-step-head"><span class="sz-step-n">${i + 1}</span> ${esc(s.name)} ${stepTag(c)}</div>
+                    <li class="sz-stepline"><div class="sz-step-head"><span class="sz-step-n">${i + 1}</span> ${esc(s.name)} ${stepTag(c, cs)}</div>
                     ${MathFmt.block(s.formula, "sz-formula")}${MathFmt.block(s.substitution, "sz-subst")}
                     ${inYourUnitsLine(s)}
                     ${s.note ? `<div class="sz-step-note">${esc(s.note)}</div>` : ""}</li>`).join("")}</ol>
@@ -312,9 +329,9 @@
                 <details class="sz-details calc-details"><summary>Show calculation details</summary>
                     <h4 class="cd-head">Values used</h4><table class="rs-table">${usedRows}</table>
                     <h4 class="cd-head">Working</h4><ol class="rs-steps">${b.steps.map((s, i) => `
-                    <li class="rs-step"><div class="rs-step-n">${i + 1}</div><div class="rs-step-body"><div class="rs-step-name">${esc(s.label)} ${stepTag(c)}</div>
+                    <li class="rs-step"><div class="rs-step-n">${i + 1}</div><div class="rs-step-body"><div class="rs-step-name">${esc(s.label)} ${stepTag(c, cs)}</div>
                     ${MathFmt.block(s.formula, "rs-formula")}${MathFmt.block(s.substitution, "rs-subst")}</div></li>`).join("")}</ol>
-                    ${(b.notes || []).filter(x => !/^Choose a bearing/.test(x)).map(x => `<p class="field-hint" style="margin-top:0.5rem">${esc(named(x))}</p>`).join("")}</details>`;
+                    ${(b.notes || []).filter(x => !/^Choose a bearing/.test(x)).map(x => `<p class="field-hint" style="margin-top:0.5rem">${esc(named(x, cs))}</p>`).join("")}</details>`;
         } else {
             const m = r.motors || [];
             const net = r.internet;
@@ -333,18 +350,32 @@
                     Tick "Also search the internet" above, or use these requirements with a supplier.</div>${netHtml}`;
         }
         // Ball/roller mismatch with the selected ABMA standard (Std 9 = ball, Std 11 = roller)
-        const eq = window.Standards && c.standard && r.status !== "NOT_DEFINED" ? Standards.equivalentFor(c.standard, c.bearing_type) : null;
+        const eq = window.Standards && c.standard && r.status !== "NOT_DEFINED" ? Standards.equivalentFor(c.standard, c.bearing_type, cs) : null;
         const stdLine = eq && /Note:/.test(eq.note) ? eq.note.replace(/^.*?(Note:)/, "$1") : "";
-        const title = r.status === "NOT_DEFINED" ? c.title.replace(/\s*\([^)]*\)\s*$/, "") : named(c.title);   // no other standard named
+        const title = r.status === "NOT_DEFINED" ? c.title.replace(/\s*\([^)]*\)\s*$/, "") : named(c.title, cs);   // no other standard named
         const noMatch = c.kind === "motor_selection" && r.status === "DONE" && !(r.motors || []).length;
         const tag = noMatch ? `<span class="data-status DATA_INCOMPLETE">NO MATCH IN LIST</span>` : badge(r.status);
         return `<div class="pj-card ${noMatch ? "waiting" : r.status.toLowerCase()}">
             <div class="pj-card-head"><span class="pj-n">${n}</span><div><div class="pj-card-title">${esc(title)} ${tag}</div>
-                <div class="pj-card-meta">${esc(c.purpose)} ${r.status === "NOT_DEFINED" ? "" : stepTag(c)}${c.kind !== "formula" && r.status !== "NOT_DEFINED" ? ` <span class="tag tag-ok">checked calculation</span>` : ""}</div>
+                <div class="pj-card-meta">${esc(c.purpose)} ${r.status === "NOT_DEFINED" ? "" : stepTag(c, cs)}${
+                    stepStd[c.id] && r.status !== "NOT_DEFINED" ? ` <button type="button" class="link-btn step-reset" data-step-reset="${esc(c.id)}">use the project standard (${esc(std())})</button>` : ""}${c.kind !== "formula" && r.status !== "NOT_DEFINED" ? ` <span class="tag tag-ok">checked calculation</span>` : ""}</div>
                 ${c.note ? `<div class="field-hint">${esc(c.note)}</div>` : ""}
                 ${stdLine ? `<div class="std-note">${esc(stdLine)}</div>` : ""}</div></div>
             ${bodyHtml}</div>`;
     }
+
+    calcs.addEventListener("change", async e => {
+        const id = e.target.dataset.stepStd;
+        if (!id || !e.target.value) return;
+        stepStd[id] = e.target.value;
+        await evaluate();
+    });
+    calcs.addEventListener("click", async e => {
+        const id = e.target.closest("[data-step-reset]")?.dataset.stepReset;
+        if (!id) return;
+        delete stepStd[id];
+        await evaluate();
+    });
 
     calcBtn.addEventListener("click", async () => {
         calcBtn.disabled = true; calcBtn.textContent = "Calculating...";
